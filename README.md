@@ -1,40 +1,37 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/pages/api-reference/create-next-app).
+# Tanker frontend
 
-## Getting Started
+The frontend uses Next.js with the Pages Router and TypeScript. Reusable UI
+components live in `src/components/common`, environment configuration is in
+`src/config`, and shared API requests live in `src/lib`.
 
-First, run the development server:
+The common UI exports include `Button`, `Card`, `PageContainer`, `DataTable`,
+and `Dialog`. `DataTable` accepts typed column renderers and stable row keys;
+`Dialog` uses the native modal dialog with a controlled `open` state.
 
-```bash
+Authentication pages are available at `/login` and `/activate`. Signed-in
+Owner/Admin users can manage invitations at `/users`. Users set a password and
+enroll a TOTP authenticator before the backend creates an eight-hour session.
+Role permissions are configurable by Owner/Admin at `/roles`.
+
+## Getting started
+
+```powershell
+Copy-Item .env.example .env.local
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+The app runs at [http://localhost:3000](http://localhost:3000). Set
+`NEXT_PUBLIC_API_URL` in `.env.local` to the backend API base URL. Values with
+the `NEXT_PUBLIC_` prefix are included in browser bundles and must not contain
+secrets. Start the Express backend separately and configure its MongoDB URI and
+MFA encryption key before using sign-in or invitation flows.
+From the workspace root, `npm run dev` starts both applications together.
 
-You can start editing the page by modifying `pages/index.tsx`. The page auto-updates as you edit the file.
+## Scripts
 
-[API routes](https://nextjs.org/docs/pages/building-your-application/routing/api-routes) can be accessed on [http://localhost:3000/api/hello](http://localhost:3000/api/hello). This endpoint can be edited in `pages/api/hello.ts`.
-
-The `pages/api` directory is mapped to `/api/*`. Files in this directory are treated as [API routes](https://nextjs.org/docs/pages/building-your-application/routing/api-routes) instead of React pages.
-
-This project uses [`next/font`](https://nextjs.org/docs/pages/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn-pages-router) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/pages/building-your-application/deploying) for more details.
+- `npm run dev` — start the development server
+- `npm run build` — create a production build
+- `npm start` — serve the production build
+- `npm run lint` — run ESLint
+- `npm run typecheck` — run the TypeScript compiler without emitting files
