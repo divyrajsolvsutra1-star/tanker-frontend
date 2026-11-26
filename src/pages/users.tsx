@@ -1,10 +1,13 @@
-import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
-import Button from "@/components/common/Button";
-import Card from "@/components/common/Card";
+import ErpPageHeader from "@/components/common/ErpPageHeader";
+import ErpStatsGrid, { type StatItem } from "@/components/common/ErpStatsGrid";
+import ErpToolbar from "@/components/common/ErpToolbar";
+import ErpDrawer from "@/components/common/ErpDrawer";
+import ErpSelect, { type SelectOption } from "@/components/common/ErpSelect";
+import ErpStatusBadge from "@/components/common/ErpStatusBadge";
 import DataTable from "@/components/common/DataTable";
-import PageContainer from "@/components/common/PageContainer";
+import { PlusIcon, RefreshIcon, UsersIcon } from "@/components/common/Icons";
 import { ApiError, getUsers, inviteUser } from "@/lib/api";
 import type { UserRecord, UserRole } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
@@ -17,29 +20,22 @@ const roleLabels: Record<UserRole, string> = {
   washer: "Washer / Employee",
 };
 
-const userColumns = [
-  { id: "name", header: "Name", cell: (user: UserRecord) => user.displayName },
-  { id: "email", header: "Email", cell: (user: UserRecord) => user.email },
-  {
-    id: "role",
-    header: "Role",
-    cell: (user: UserRecord) => roleLabels[user.role],
-  },
-  {
-    id: "status",
-    header: "Status",
-    cell: (user: UserRecord) => (
-      <span className="health-state health-state--waiting">{user.status}</span>
-    ),
-  },
-] as const;
+const roleOptions: SelectOption[] = [
+  { value: "owner_admin", label: "Owner / Admin" },
+  { value: "manager", label: "Manager" },
+  { value: "entry_operator", label: "Entry Operator" },
+  { value: "accountant", label: "Accountant" },
+  { value: "washer", label: "Washer / Employee" },
+];
 
 export default function UsersPage() {
-  const { user, signOut } = useAuth();
+  const { user } = useAuth();
   const [users, setUsers] = useState<UserRecord[]>([]);
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<UserRole>("entry_operator");
+  const [search, setSearch] = useState("");
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [activationUrl, setActivationUrl] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [isLoading, setIsLoading] = useState(true);
@@ -47,6 +43,7 @@ export default function UsersPage() {
 
   const loadUsers = useCallback(async () => {
     try {
+      setIsLoading(true);
       const result = await getUsers();
       setUsers(result.users);
       setErrorMessage("");
@@ -60,28 +57,8 @@ export default function UsersPage() {
   }, []);
 
   useEffect(() => {
-    let active = true;
-
-    getUsers()
-      .then((result) => {
-        if (!active) return;
-        setUsers(result.users);
-        setErrorMessage("");
-      })
-      .catch((error: unknown) => {
-        if (!active) return;
-        setErrorMessage(
-          error instanceof ApiError ? error.message : "Could not load users.",
-        );
-      })
-      .finally(() => {
-        if (active) setIsLoading(false);
-      });
-
-    return () => {
-      active = false;
-    };
-  }, []);
+    void loadUsers();
+  }, [loadUsers]);
 
   async function handleInvite(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -94,6 +71,7 @@ export default function UsersPage() {
       setActivationUrl(result.activationUrl);
       setDisplayName("");
       setEmail("");
+      setRole("entry_operator");
       await loadUsers();
     } catch (error) {
       setErrorMessage(
@@ -104,133 +82,245 @@ export default function UsersPage() {
     }
   }
 
+  // Filtered users
+  const filteredUsers = useMemo(() => {
+    if (!search) return users;
+    const q = search.toLowerCase();
+    return users.filter(
+      (u) =>
+        u.displayName.toLowerCase().includes(q) ||
+        u.email.toLowerCase().includes(q) ||
+        (roleLabels[u.role] || "").toLowerCase().includes(q),
+    );
+  }, [users, search]);
+
+  // Summary stats
+  const stats: StatItem[] = useMemo(() => {
+    const total = users.length;
+    const active = users.filter((u) => u.status === "active").length;
+    const invited = users.filter((u) => u.status !== "active").length;
+    return [
+      { label: "TOTAL ACCOUNTS", value: total },
+      { label: "ACTIVE USERS", value: active, highlight: true },
+      { label: "PENDING INVITATIONS", value: invited },
+    ];
+  }, [users]);
+
+  const columns = [
+    {
+      id: "name",
+      header: "Staff Name",
+      cell: (u: UserRecord) => (
+        <span style={{ fontWeight: 600, color: "#0f172a" }}>{u.displayName}</span>
+      ),
+    },
+    {
+      id: "email",
+      header: "Email Address",
+      cell: (u: UserRecord) => (
+        <span style={{ color: "#475569" }}>{u.email}</span>
+      ),
+    },
+    {
+      id: "role",
+      header: "Assigned Role",
+      cell: (u: UserRecord) => (
+        <span className="erp-type-badge">{roleLabels[u.role] || u.role}</span>
+      ),
+    },
+    {
+      id: "status",
+      header: "Status",
+      cell: (u: UserRecord) => (
+        <ErpStatusBadge status={u.status || "active"} />
+      ),
+    },
+  ];
+
   if (user?.role !== "owner_admin") {
     return (
-      <PageContainer>
-        <Card>
-          <h1>Access denied</h1>
-          <p>Only Owner/Admin users can manage accounts.</p>
-          <Link href="/">Return to dashboard</Link>
-        </Card>
-      </PageContainer>
+      <div className="erp-module">
+        <div className="erp-card" style={{ padding: "32px", textAlign: "center" }}>
+          <h2 style={{ fontSize: "18px", fontWeight: 700, color: "#0f172a" }}>Access Restricted</h2>
+          <p style={{ color: "#64748b", margin: "8px 0 0" }}>
+            Only Owner / Admin users have permission to manage staff accounts and invitations.
+          </p>
+        </div>
+      </div>
     );
   }
 
   return (
-    <PageContainer className="dashboard-container">
-      <header className="dashboard-topbar">
-        <Link className="brand-mark" href="/">
-          TANKER
-          <span className="brand-mark__subtitle">WASH MANAGEMENT</span>
-        </Link>
-        <div className="user-header">
-          <span>{user.displayName}</span>
-          <Button onClick={() => void signOut()} type="button" variant="secondary">
-            Sign out
-          </Button>
-        </div>
-      </header>
-      <main className="users-main">
-        <div className="users-heading">
-          <div>
-            <p className="intro-kicker">Administration</p>
-            <h1>User management</h1>
-            <p className="dashboard-description">
-              Invite staff accounts. Each person sets a password and enrolls
-              mandatory authenticator MFA before they can sign in.
-            </p>
+    <div className="erp-module">
+      <ErpPageHeader
+        title="User & Staff Accounts"
+        description="Invite terminal operators, accountants and managers with role-based access control."
+        actions={
+          <div style={{ display: "flex", gap: "8px" }}>
+            <button
+              type="button"
+              className="erp-btn erp-btn--secondary"
+              onClick={() => void loadUsers()}
+              disabled={isLoading}
+            >
+              <RefreshIcon size={14} />
+              <span>Refresh</span>
+            </button>
+            <button
+              type="button"
+              className="erp-btn erp-btn--primary"
+              onClick={() => {
+                setActivationUrl("");
+                setErrorMessage("");
+                setIsDrawerOpen(true);
+              }}
+            >
+              <PlusIcon size={14} />
+              <span>Invite Staff</span>
+            </button>
           </div>
-          <Link className="text-link" href="/">
-            Back to dashboard
-          </Link>
+        }
+      />
+
+      <ErpStatsGrid stats={stats} />
+
+      {/* Main Table Card */}
+      <div className="erp-card">
+        <ErpToolbar
+          title="Staff Directory"
+          count={filteredUsers.length}
+          search={search}
+          onSearchChange={setSearch}
+          searchPlaceholder="Search by name, email, or role..."
+        />
+
+        <div className="erp-table-container">
+          <DataTable
+            caption="Staff user accounts"
+            columns={columns}
+            emptyMessage={isLoading ? "Loading staff accounts..." : "No staff accounts found."}
+            getRowKey={(row) => row.id}
+            rows={filteredUsers}
+          />
         </div>
 
-        <div className="users-layout">
-          <Card>
-            <h2>Invite a user</h2>
-            <form className="app-form" onSubmit={handleInvite}>
-              <label>
-                Full name
-                <input
-                  maxLength={100}
-                  minLength={2}
-                  onChange={(event) => setDisplayName(event.target.value)}
-                  required
-                  value={displayName}
-                />
-              </label>
-              <label>
-                Email
-                <input
-                  autoComplete="off"
-                  onChange={(event) => setEmail(event.target.value)}
-                  required
-                  type="email"
-                  value={email}
-                />
-              </label>
-              <label>
-                Role
-                <select
-                  onChange={(event) => setRole(event.target.value as UserRole)}
-                  value={role}
-                >
-                  {Object.entries(roleLabels).map(([value, label]) => (
-                    <option key={value} value={value}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              {errorMessage ? (
-                <p className="connection-error" role="alert">
-                  {errorMessage}
-                </p>
-              ) : null}
-              <Button disabled={isSubmitting} type="submit">
-                {isSubmitting ? "Creating invitation..." : "Create invitation"}
-              </Button>
-            </form>
-            {activationUrl ? (
-              <div className="invitation-result" role="status">
-                <strong>Share this one-time activation link securely:</strong>
-                <a href={activationUrl}>{activationUrl}</a>
-                <span>It expires after 24 hours.</span>
-              </div>
-            ) : null}
-          </Card>
+        <div className="erp-table-footer">
+          <span>Showing {filteredUsers.length} of {users.length} user accounts</span>
+        </div>
+      </div>
 
-          <Card>
-            <div className="dashboard-card__heading">
-              <div>
-                <h2>Staff accounts</h2>
-                <p>Invited users must enroll MFA before gaining access.</p>
-              </div>
-              <Button
-                disabled={isLoading}
-                onClick={() => {
-                  setIsLoading(true);
-                  void loadUsers();
-                }}
-                type="button"
-                variant="secondary"
-              >
-                Refresh
-              </Button>
+      {/* Invite User Slide-over Drawer */}
+      <ErpDrawer
+        isOpen={isDrawerOpen}
+        onClose={() => setIsDrawerOpen(false)}
+        title="Invite New Staff Member"
+        subtitle="Invited staff will receive a one-time activation link to set their password."
+      >
+        <form className="erp-drawer-form" onSubmit={handleInvite}>
+          <div className="erp-form-grid">
+            <div className="erp-field-group erp-field-group--full">
+              <label htmlFor="invite-name">
+                Full Name <span className="erp-required-star">*</span>
+              </label>
+              <input
+                id="invite-name"
+                className="erp-input"
+                maxLength={100}
+                minLength={2}
+                placeholder="e.g. Ramesh Patel"
+                required
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+              />
             </div>
-            {errorMessage && users.length > 0 ? (
-              <p className="connection-error" role="alert">{errorMessage}</p>
-            ) : null}
-            <DataTable
-              caption="User accounts"
-              columns={userColumns}
-              emptyMessage={isLoading ? "Loading users..." : "No users found."}
-              getRowKey={(row) => row.id}
-              rows={users}
-            />
-          </Card>
-        </div>
-      </main>
-    </PageContainer>
+
+            <div className="erp-field-group erp-field-group--full">
+              <label htmlFor="invite-email">
+                Work Email <span className="erp-required-star">*</span>
+              </label>
+              <input
+                id="invite-email"
+                type="email"
+                className="erp-input"
+                autoComplete="off"
+                placeholder="e.g. ramesh@tanker.local"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            </div>
+
+            <div className="erp-field-group erp-field-group--full">
+              <label htmlFor="invite-role">
+                Assigned Role <span className="erp-required-star">*</span>
+              </label>
+              <ErpSelect
+                id="invite-role"
+                value={role}
+                options={roleOptions}
+                placeholder="Select role permissions..."
+                onChange={(val) => setRole(val as UserRole)}
+              />
+            </div>
+          </div>
+
+          {errorMessage && (
+            <div className="erp-alert erp-alert--danger" role="alert" style={{ marginTop: "12px" }}>
+              {errorMessage}
+            </div>
+          )}
+
+          {activationUrl && (
+            <div
+              className="erp-card"
+              style={{
+                marginTop: "16px",
+                padding: "16px",
+                background: "#f0fdfa",
+                borderColor: "#99f6e4",
+              }}
+            >
+              <p style={{ margin: "0 0 6px", fontSize: "13px", fontWeight: 700, color: "#0f766e" }}>
+                Activation Link Generated:
+              </p>
+              <div
+                style={{
+                  wordBreak: "break-all",
+                  background: "#ffffff",
+                  padding: "8px 12px",
+                  borderRadius: "6px",
+                  border: "1px solid #ccfbf1",
+                  fontSize: "12px",
+                  color: "#0f766e",
+                  fontWeight: 600,
+                }}
+              >
+                {activationUrl}
+              </div>
+              <p style={{ margin: "6px 0 0", fontSize: "11px", color: "#64748b" }}>
+                Share this secure link with the user. Valid for 24 hours.
+              </p>
+            </div>
+          )}
+
+          <div className="erp-drawer-actions">
+            <button
+              type="button"
+              className="erp-btn erp-btn--secondary"
+              onClick={() => setIsDrawerOpen(false)}
+            >
+              Close
+            </button>
+            <button
+              type="submit"
+              className="erp-btn erp-btn--primary"
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? "Creating Invitation..." : "Send Invitation"}
+            </button>
+          </div>
+        </form>
+      </ErpDrawer>
+    </div>
   );
 }

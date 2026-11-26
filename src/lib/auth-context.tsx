@@ -8,7 +8,7 @@ import {
 } from "react";
 import type { ReactNode } from "react";
 import {
-  confirmMfaEnrollment,
+  acceptInvitation,
   getCurrentUser,
   login,
   logout,
@@ -18,8 +18,8 @@ import type { AuthUser } from "@/lib/api";
 interface AuthContextValue {
   user: AuthUser | null;
   isLoading: boolean;
-  signIn: (email: string, password: string, code: string) => Promise<void>;
-  finishMfaEnrollment: (setupToken: string, code: string) => Promise<void>;
+  signIn: (email: string, password: string) => Promise<void>;
+  activateAccount: (token: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -49,16 +49,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signIn = useCallback(
-    async (email: string, password: string, code: string) => {
-      const result = await login(email, password, code);
+    async (email: string, password: string) => {
+      const result = await login(email, password);
       setUser(result.user);
     },
     [],
   );
 
-  const finishMfaEnrollment = useCallback(
-    async (setupToken: string, code: string) => {
-      const result = await confirmMfaEnrollment(setupToken, code);
+  const activateAccount = useCallback(
+    async (token: string, password: string) => {
+      const result = await acceptInvitation(token, password);
       setUser(result.user);
     },
     [],
@@ -73,8 +73,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ user, isLoading, signIn, finishMfaEnrollment, signOut }),
-    [user, isLoading, signIn, finishMfaEnrollment, signOut],
+    () => ({ user, isLoading, signIn, activateAccount, signOut }),
+    [user, isLoading, signIn, activateAccount, signOut],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

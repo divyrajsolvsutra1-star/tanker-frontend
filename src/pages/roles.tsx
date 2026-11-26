@@ -1,8 +1,6 @@
-import Link from "next/link";
 import { useEffect, useState } from "react";
-import Button from "@/components/common/Button";
-import Card from "@/components/common/Card";
-import PageContainer from "@/components/common/PageContainer";
+import ErpPageHeader from "@/components/common/ErpPageHeader";
+import { CheckCircleIcon, RefreshIcon, RolesIcon, SpinnerIcon } from "@/components/common/Icons";
 import {
   ApiError,
   getRolePermissions,
@@ -52,36 +50,34 @@ const actionLabels: Record<string, string> = {
 };
 
 export default function RolesPage() {
-  const { user, signOut } = useAuth();
+  const { user } = useAuth();
   const [settings, setSettings] = useState<RolePermissionsResponse | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
   const [savedMessage, setSavedMessage] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [savingRole, setSavingRole] = useState<UserRole | null>(null);
 
-  useEffect(() => {
-    let active = true;
-
+  function loadPermissions() {
+    setIsLoading(true);
     getRolePermissions()
       .then((result) => {
-        if (active) setSettings(result);
+        setSettings(result);
+        setErrorMessage("");
       })
       .catch((error: unknown) => {
-        if (active) {
-          setErrorMessage(
-            error instanceof ApiError
-              ? error.message
-              : "Could not load role permissions.",
-          );
-        }
+        setErrorMessage(
+          error instanceof ApiError
+            ? error.message
+            : "Could not load role permissions.",
+        );
       })
       .finally(() => {
-        if (active) setIsLoading(false);
+        setIsLoading(false);
       });
+  }
 
-    return () => {
-      active = false;
-    };
+  useEffect(() => {
+    loadPermissions();
   }, []);
 
   function togglePermission(
@@ -100,12 +96,15 @@ export default function RolesPage() {
 
           const currentActions = role.permissions[moduleName] ?? [];
           const nextActions = enabled
-            ? [...new Set([...currentActions, action])]
+            ? Array.from(new Set([...currentActions, action]))
             : currentActions.filter((item) => item !== action);
 
           return {
             ...role,
-            permissions: { ...role.permissions, [moduleName]: nextActions },
+            permissions: {
+              ...role.permissions,
+              [moduleName]: nextActions,
+            },
           };
         }),
       };
@@ -114,8 +113,8 @@ export default function RolesPage() {
 
   async function savePermissions(role: RolePermissionSet) {
     setSavingRole(role.role);
-    setSavedMessage("");
     setErrorMessage("");
+    setSavedMessage("");
 
     try {
       const saved = await saveRolePermissions(role.role, role.permissions);
@@ -129,7 +128,8 @@ export default function RolesPage() {
             }
           : current,
       );
-      setSavedMessage(`${roleLabels[role.role]} permissions saved.`);
+      setSavedMessage(`${roleLabels[role.role]} permissions saved successfully.`);
+      setTimeout(() => setSavedMessage(""), 4000);
     } catch (error) {
       setErrorMessage(
         error instanceof ApiError
@@ -143,80 +143,130 @@ export default function RolesPage() {
 
   if (user?.role !== "owner_admin") {
     return (
-      <PageContainer>
-        <Card>
-          <h1>Access denied</h1>
-          <p>Only Owner/Admin users can configure permissions.</p>
-          <Link href="/">Return to dashboard</Link>
-        </Card>
-      </PageContainer>
+      <div className="erp-module">
+        <div className="erp-card" style={{ padding: "32px", textAlign: "center" }}>
+          <h2 style={{ fontSize: "18px", fontWeight: 700, color: "#0f172a" }}>Access Restricted</h2>
+          <p style={{ color: "#64748b", margin: "8px 0 0" }}>
+            Only Owner / Admin users have permission to configure security roles and permissions.
+          </p>
+        </div>
+      </div>
     );
   }
 
   return (
-    <PageContainer className="dashboard-container">
-      <header className="dashboard-topbar">
-        <Link className="brand-mark" href="/">
-          TANKER
-          <span className="brand-mark__subtitle">WASH MANAGEMENT</span>
-        </Link>
-        <div className="user-header">
-          <span>{user.displayName}</span>
-          <Button onClick={() => void signOut()} type="button" variant="secondary">
-            Sign out
-          </Button>
+    <div className="erp-module">
+      <ErpPageHeader
+        title="Role-Based Access Control"
+        description="Configure granular module permissions and operational authorization matrices for each staff role."
+        actions={
+          <button
+            type="button"
+            className="erp-btn erp-btn--secondary"
+            onClick={loadPermissions}
+            disabled={isLoading}
+          >
+            <RefreshIcon size={14} />
+            <span>Reload Roles</span>
+          </button>
+        }
+      />
+
+      {errorMessage && (
+        <div className="erp-alert erp-alert--danger" role="alert">
+          {errorMessage}
         </div>
-      </header>
-      <main className="users-main">
-        <div className="users-heading">
-          <div>
-            <p className="intro-kicker">Administration</p>
-            <h1>Role permissions</h1>
-            <p className="dashboard-description">
-              Owner/Admin always retains full access. Configure access for each
-              other role by module and action.
-            </p>
-          </div>
-          <Link className="text-link" href="/">
-            Back to dashboard
-          </Link>
+      )}
+
+      {savedMessage && (
+        <div className="erp-alert erp-alert--success" role="status" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <CheckCircleIcon size={16} color="#0f766e" />
+          <span>{savedMessage}</span>
         </div>
-        {errorMessage ? (
-          <p className="connection-error" role="alert">{errorMessage}</p>
-        ) : null}
-        {savedMessage ? (
-          <p className="connection-success" role="status">{savedMessage}</p>
-        ) : null}
-        {isLoading ? (
-          <Card>Loading permission settings…</Card>
-        ) : settings ? (
-          <div className="permission-roles">
-            {settings.roles.map((role) => (
-              <Card className="permission-role" key={role.role}>
-                <div className="dashboard-card__heading">
-                  <div>
-                    <h2>{roleLabels[role.role]}</h2>
-                    <p>Unselected actions are denied.</p>
-                  </div>
-                  <Button
-                    disabled={savingRole !== null}
-                    onClick={() => void savePermissions(role)}
-                    type="button"
-                  >
-                    {savingRole === role.role ? "Saving..." : "Save permissions"}
-                  </Button>
+      )}
+
+      {isLoading ? (
+        <div className="erp-card" style={{ padding: "36px", textAlign: "center", color: "#64748b", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}>
+          <SpinnerIcon size={20} color="#0f766e" />
+          <span>Loading security matrices...</span>
+        </div>
+      ) : settings ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+          {settings.roles.map((role) => (
+            <div className="erp-card" key={role.role} style={{ overflow: "hidden" }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "16px 20px",
+                  background: "#f8fafc",
+                  borderBottom: "1px solid #e2e8f0",
+                }}
+              >
+                <div>
+                  <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 700, color: "#0f172a" }}>
+                    {roleLabels[role.role]}
+                  </h3>
+                  <p style={{ margin: "2px 0 0", fontSize: "12px", color: "#64748b" }}>
+                    Actions left unchecked are denied at the API gateway.
+                  </p>
                 </div>
-                <div className="permission-modules">
-                  {settings.modules.map((moduleName) => (
-                    <fieldset className="permission-module" key={moduleName}>
-                      <legend>{moduleLabels[moduleName] ?? moduleName}</legend>
-                      <div className="permission-actions">
-                        {settings.actions.map((action) => (
-                          <label key={action}>
+                <button
+                  type="button"
+                  className="erp-btn erp-btn--primary"
+                  disabled={savingRole !== null}
+                  onClick={() => void savePermissions(role)}
+                >
+                  {savingRole === role.role ? "Saving Matrix..." : `Save ${roleLabels[role.role]}`}
+                </button>
+              </div>
+
+              <div
+                style={{
+                  padding: "20px",
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+                  gap: "16px",
+                }}
+              >
+                {settings.modules.map((moduleName) => (
+                  <div
+                    key={moduleName}
+                    style={{
+                      border: "1px solid #f1f5f9",
+                      borderRadius: "8px",
+                      padding: "14px",
+                      background: "#ffffff",
+                    }}
+                  >
+                    <div style={{ fontSize: "13px", fontWeight: 700, color: "#1e293b", marginBottom: "10px" }}>
+                      {moduleLabels[moduleName] ?? moduleName}
+                    </div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                      {settings.actions.map((action) => {
+                        const isChecked = (role.permissions[moduleName] ?? []).includes(action);
+                        return (
+                          <label
+                            key={action}
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "6px",
+                              fontSize: "12px",
+                              color: isChecked ? "#0f766e" : "#64748b",
+                              background: isChecked ? "#f0fdfa" : "#f8fafc",
+                              border: `1px solid ${isChecked ? "#99f6e4" : "#e2e8f0"}`,
+                              padding: "4px 8px",
+                              borderRadius: "6px",
+                              cursor: "pointer",
+                              userSelect: "none",
+                              fontWeight: isChecked ? 600 : 400,
+                            }}
+                          >
                             <input
-                              checked={(role.permissions[moduleName] ?? []).includes(
-                                action,
-                              )}
+                              type="checkbox"
+                              checked={isChecked}
                               onChange={(event) =>
                                 togglePermission(
                                   role.role,
@@ -225,20 +275,20 @@ export default function RolesPage() {
                                   event.target.checked,
                                 )
                               }
-                              type="checkbox"
+                              style={{ accentColor: "#0f766e" }}
                             />
                             {actionLabels[action] ?? action}
                           </label>
-                        ))}
-                      </div>
-                    </fieldset>
-                  ))}
-                </div>
-              </Card>
-            ))}
-          </div>
-        ) : null}
-      </main>
-    </PageContainer>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
   );
 }

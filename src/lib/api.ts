@@ -83,11 +83,11 @@ export function getApiHealth(signal?: AbortSignal) {
   return apiRequest<ApiHealth>("health", { signal });
 }
 
-export function login(email: string, password: string, code: string) {
+export function login(email: string, password: string) {
   return apiRequest<{ user: AuthUser; expiresAt: string }>("auth/login", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password, code }),
+    body: JSON.stringify({ email, password }),
   });
 }
 
@@ -100,22 +100,10 @@ export function logout() {
 }
 
 export function acceptInvitation(token: string, password: string) {
-  return apiRequest<{
-    setupToken: string;
-    otpauthUrl: string;
-    manualSecret: string;
-  }>("auth/invitations/accept", {
+  return apiRequest<{ user: AuthUser; expiresAt: string }>("auth/invitations/accept", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ token, password }),
-  });
-}
-
-export function confirmMfaEnrollment(setupToken: string, code: string) {
-  return apiRequest<{ user: AuthUser; expiresAt: string }>("auth/mfa/confirm", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ setupToken, code }),
   });
 }
 
@@ -152,4 +140,52 @@ export function saveRolePermissions(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ permissions }),
   });
+}
+
+export interface PaginatedResponse<T> {
+  items: T[];
+  pagination: { page: number; limit: number; total: number; pages: number };
+}
+
+export async function getBusinessResource<T>(
+  path: string,
+  params: Record<string,string|number|undefined> = {},
+) {
+  const query = new URLSearchParams();
+  Object.entries(params).forEach(([key,value])=>{
+    if(value !== undefined && value !== "") query.set(key,String(value));
+  });
+  const suffix = query.size ? `?${query.toString()}` : "";
+  return apiRequest<PaginatedResponse<T> | {items:T[]; [key:string]:unknown}>(`${path}${suffix}`);
+}
+
+export function createBusinessResource<T>(path:string, body:Record<string,unknown>) {
+  return apiRequest<{item:T}>(path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+}
+
+export function updateBusinessResource<T>(path:string, id:string, body:Record<string,unknown>) {
+  return apiRequest<{item:T}>(`${path}/${id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+}
+
+export function deactivateBusinessResource<T>(path:string,id:string) {
+  return apiRequest<{item:T}>(`${path}/${id}`,{method:"DELETE"});
+}
+
+export interface DashboardSummary {
+  todayWashEntries:number;
+  todayVehicles:number;
+  washTypeSummary:Record<string,number>;
+  statuses:{booked:number;washing:number;completed:number;delivered:number;cancelled:number};
+  todayCollections:number;
+  collectionByMethod:Record<string,number>;
+  totalCustomerOutstanding:number;
+  cashBalance:number;
+  bankBalances:{id:string;name:string;bankName:string;balance:number}[];
+  monthlyExpenses:number;
+  creditAlerts?:unknown[];
+  overduePayments?:unknown[];
+}
+
+export function getDashboardSummary() {
+  return apiRequest<DashboardSummary>("dashboard");
 }
