@@ -23,6 +23,7 @@ export default function WashEntriesPage() {
   const [customers, setCustomers] = useState<Item[]>([]);
   const [vehicles, setVehicles] = useState<Item[]>([]);
   const [washTypes, setWashTypes] = useState<Item[]>([]);
+  const [employees, setEmployees] = useState<Item[]>([]);
   const [activeTab, setActiveTab] = useState<"all" | "booked" | "washing" | "completed" | "delivered">("all");
   const [search, setSearch] = useState("");
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -61,7 +62,21 @@ export default function WashEntriesPage() {
     getBusinessResource<Item>("wash-types", { limit: 100 })
       .then((res) => setWashTypes("items" in res ? res.items : []))
       .catch(() => {});
+    getBusinessResource<Item>("employees", { limit: 100 })
+      .then((res) => setEmployees("items" in res ? res.items : []))
+      .catch(() => {});
   }, []);
+
+  // Auto-fetch rate helper when customer or wash type changes
+  function updateRate(customerId: string, washTypeId: string) {
+    if (!washTypeId) return;
+    const wt = washTypes.find((w) => String(w._id) === washTypeId);
+    if (!wt) return;
+    const rates = Array.isArray(wt.rates) ? (wt.rates as { customerId?: string; amount?: number }[]) : [];
+    const customRate = rates.find((r) => String(r.customerId) === customerId)?.amount;
+    const rateToSet = customRate !== undefined ? customRate : Number(wt.rate || 350);
+    setForm((prev) => ({ ...prev, savedRate: rateToSet, rateModified: false }));
+  }
 
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -69,10 +84,7 @@ export default function WashEntriesPage() {
     setSaved("");
     setIsSubmitting(true);
     try {
-      const employeeIds = String(form.employeeIds || "")
-        .split(",")
-        .map((v) => v.trim())
-        .filter(Boolean);
+      const employeeIds = form.employeeId ? [String(form.employeeId)] : [];
       const r = await apiRequest<{ item: Item }>("wash-entries", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -103,7 +115,7 @@ export default function WashEntriesPage() {
     }
   }
 
-  function printReceipt(r: Item) {
+  function printReceipt(r: Item, format: "thermal" | "a4" = "thermal") {
     const customer =
       typeof r.customerId === "object" && r.customerId
         ? (r.customerId as { name: string }).name
@@ -112,16 +124,139 @@ export default function WashEntriesPage() {
       typeof r.vehicleId === "object" && r.vehicleId
         ? (r.vehicleId as { vehicleNumber: string }).vehicleNumber
         : String(r.vehicleId || "-");
-    const html = `<html><head><title>Wash Receipt #${String(
-      r.entryNumber
-    )}</title><style>body{font-family:Arial,sans-serif;width:300px;margin:20px auto;border:1px solid #ccc;padding:16px;border-radius:8px}@media print{body{width:72mm;margin:0;border:none}}h2{margin:0 0 8px;font-size:18px}p{margin:6px 0;font-size:13px}</style></head><body><h2>Tanker Wash Receipt</h2><p><strong>Entry No:</strong> #${String(
-      r.entryNumber
-    )}</p><p><strong>Customer:</strong> ${customer}</p><p><strong>Vehicle:</strong> ${vehicle}</p><p><strong>Charge:</strong> ₹${Number(
-      r.savedRate || 0
-    ).toLocaleString("en-IN")}</p><p><strong>Payment:</strong> ${String(r.paymentType)} ${
-      r.paymentMethod ? `(${String(r.paymentMethod)})` : ""
-    }</p><p><strong>Status:</strong> ${String(r.status)}</p><script>window.onload=()=>window.print()<\/script></body></html>`;
-    const win = window.open("", "", "width=440,height=600");
+    const washType =
+      typeof r.washTypeId === "object" && r.washTypeId
+        ? (r.washTypeId as { name: string }).name
+        : "Standard Tanker Wash";
+    const employeesList = Array.isArray(r.employeeIds)
+      ? r.employeeIds.map((e) => (typeof e === "object" && e ? (e as { name: string }).name : String(e))).join(", ")
+      : "-";
+    const entryDate = r.entryDate ? new Date(String(r.entryDate)).toLocaleString("en-IN") : new Date().toLocaleString("en-IN");
+    const amount = Number(r.savedRate || 0).toLocaleString("en-IN");
+
+    const thermalCss = `
+      body { font-family: 'Courier New', monospace; width: 72mm; margin: 0 auto; padding: 12px; font-size: 12px; line-height: 1.3; color: #000; }
+      .header { text-align: center; border-bottom: 1px dashed #000; padding-bottom: 8px; margin-bottom: 8px; }
+      .header h2 { margin: 0 0 4px; font-size: 15px; text-transform: uppercase; }
+      .header p { margin: 2px 0; font-size: 11px; }
+      .row { display: flex; justify-content: space-between; margin: 4px 0; }
+      .divider { border-top: 1px dashed #000; margin: 8px 0; }
+      .total-row { font-size: 14px; font-weight: bold; }
+      .notice { text-align: center; font-size: 10px; margin-top: 10px; font-style: italic; }
+      @media print { body { width: 72mm; margin: 0; padding: 4px; } }
+    `;
+
+    const a4Css = `
+      body { font-family: Arial, sans-serif; max-width: 750px; margin: 20px auto; padding: 32px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 13.5px; color: #1e293b; }
+      .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #0f172a; padding-bottom: 16px; margin-bottom: 20px; }
+      .header h1 { margin: 0; font-size: 22px; color: #0f172a; }
+      .header p { margin: 4px 0; color: #64748b; font-size: 12.5px; }
+      .badge { display: inline-block; padding: 4px 10px; background: #e2e8f0; border-radius: 4px; font-weight: bold; font-size: 12px; }
+      .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+      .box { background: #f8fafc; border: 1px solid #e2e8f0; padding: 14px; border-radius: 6px; }
+      .box strong { display: block; font-size: 11px; color: #64748b; text-transform: uppercase; margin-bottom: 4px; }
+      .table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+      .table th { background: #f1f5f9; padding: 10px; text-align: left; border-bottom: 2px solid #cbd5e1; font-size: 12px; }
+      .table td { padding: 12px 10px; border-bottom: 1px solid #e2e8f0; }
+      .total-box { margin-left: auto; width: 280px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 14px; margin-top: 10px; }
+      .total-row { display: flex; justify-content: space-between; font-size: 16px; font-weight: bold; color: #0f172a; }
+      .notice { margin-top: 30px; text-align: center; color: #64748b; font-size: 11.5px; border-top: 1px dashed #cbd5e1; padding-top: 12px; }
+      @media print { body { border: none; padding: 0; margin: 0; max-width: 100%; } }
+    `;
+
+    const html = format === "thermal" ? `
+      <!DOCTYPE html><html><head><meta charset="utf-8"><title>Slip #${String(r.entryNumber)}</title><style>${thermalCss}</style></head>
+      <body>
+        <div class="header">
+          <h2>TANKER WASH SERVICES</h2>
+          <p>Solvsutra Wash Management Center</p>
+          <p>Ph: +91 98765 43210</p>
+        </div>
+        <div class="row"><span>Slip No:</span><strong>#${String(r.entryNumber)}</strong></div>
+        <div class="row"><span>Date/Time:</span><span>${entryDate}</span></div>
+        <div class="divider"></div>
+        <div class="row"><span>Customer:</span><strong>${customer}</strong></div>
+        <div class="row"><span>Vehicle No:</span><strong>${vehicle}</strong></div>
+        <div class="row"><span>Driver:</span><span>${String(r.driverName || "-")} (${String(r.driverMobileNumber || "-")})</span></div>
+        <div class="row"><span>Service:</span><span>${washType}</span></div>
+        ${employeesList !== "-" ? `<div class="row"><span>Washers:</span><span>${employeesList}</span></div>` : ""}
+        <div class="divider"></div>
+        <div class="row total-row"><span>Wash Charge:</span><span>₹ ${amount}</span></div>
+        <div class="row"><span>Payment:</span><span>${String(r.paymentType).toUpperCase()} ${r.paymentMethod ? `(${String(r.paymentMethod).toUpperCase()})` : ""}</span></div>
+        <div class="row"><span>Status:</span><span>${String(r.status).toUpperCase()}</span></div>
+        <div class="notice">
+          *** Normal Service / Wash Slip ***<br/>
+          (Not a GST tax invoice)
+        </div>
+        <script>window.onload=()=>window.print();<\/script>
+      </body></html>
+    ` : `
+      <!DOCTYPE html><html><head><meta charset="utf-8"><title>Receipt #${String(r.entryNumber)}</title><style>${a4Css}</style></head>
+      <body>
+        <div class="header">
+          <div>
+            <h1>TANKER WASH MANAGEMENT SYSTEM</h1>
+            <p>Professional Tanker Chemical & High-Pressure Wash Center</p>
+            <p>Highway Bypass Junction, Industrial Zone | Phone: +91 98765 43210</p>
+          </div>
+          <div style="text-align: right;">
+            <span class="badge">WASH RECEIPT</span>
+            <h3 style="margin: 6px 0 0; color: #0f172a;">#${String(r.entryNumber)}</h3>
+            <p style="margin: 2px 0;">${entryDate}</p>
+          </div>
+        </div>
+
+        <div class="grid">
+          <div class="box">
+            <strong>Customer / Company</strong>
+            <div style="font-size: 15px; font-weight: bold; color: #0f172a;">${customer}</div>
+            <div style="color: #64748b; font-size: 12px; margin-top: 4px;">Terms: ${String(r.paymentType).toUpperCase()}</div>
+          </div>
+          <div class="box">
+            <strong>Tanker & Driver Details</strong>
+            <div style="font-size: 15px; font-weight: bold; color: #0f172a;">Vehicle: ${vehicle}</div>
+            <div style="color: #475569; font-size: 12.5px; margin-top: 4px;">Driver: ${String(r.driverName || "Standard")} | Mob: ${String(r.driverMobileNumber || "-")}</div>
+          </div>
+        </div>
+
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Description / Wash Service</th>
+              <th>Assigned Washers</th>
+              <th>Payment Mode</th>
+              <th style="text-align: right;">Amount (₹)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>${washType}</strong></td>
+              <td>${employeesList}</td>
+              <td>${String(r.paymentType).toUpperCase()} ${r.paymentMethod ? `(${String(r.paymentMethod).toUpperCase()})` : ""}</td>
+              <td style="text-align: right; font-weight: bold; color: #0f766e;">₹ ${amount}</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="total-box">
+          <div class="total-row">
+            <span>Total Payable:</span>
+            <span>₹ ${amount}</span>
+          </div>
+          <div style="font-size: 12px; color: #64748b; margin-top: 6px; text-align: right;">
+            Wash Status: <strong style="color: #0f172a; text-transform: uppercase;">${String(r.status)}</strong>
+          </div>
+        </div>
+
+        <div class="notice">
+          This receipt is an operational tanker wash service receipt. As per proposal, this is not a GST tax invoice.<br/>
+          Thank you for choosing Tanker Wash Services!
+        </div>
+        <script>window.onload=()=>window.print();<\/script>
+      </body></html>
+    `;
+
+    const win = window.open("", "", format === "thermal" ? "width=420,height=600" : "width=850,height=800");
     if (win) {
       win.document.write(html);
       win.document.close();
@@ -137,22 +272,36 @@ export default function WashEntriesPage() {
     [customers]
   );
 
-  const vehicleOptions = useMemo(
-    () =>
-      vehicles.map((v) => ({
-        value: String(v._id),
-        label: `${String(v.vehicleNumber)} - Driver: ${String(v.driverName || "Standard")}`,
-      })),
-    [vehicles]
-  );
+  const vehicleOptions = useMemo(() => {
+    const list = form.customerId
+      ? vehicles.filter((v) => {
+          const cid = typeof v.customerId === "object" && v.customerId ? (v.customerId as { _id: string })._id : v.customerId;
+          return String(cid) === String(form.customerId);
+        })
+      : vehicles;
+
+    return list.map((v) => ({
+      value: String(v._id),
+      label: `${String(v.vehicleNumber)} - Driver: ${String(v.driverName || "Standard")}`,
+    }));
+  }, [vehicles, form.customerId]);
 
   const washTypeOptions = useMemo(
     () =>
       washTypes.map((wt) => ({
         value: String(wt._id),
-        label: `${String(wt.name)} - ₹${Number(wt.rate || 0)}`,
+        label: `${String(wt.name)}`,
       })),
     [washTypes]
+  );
+
+  const employeeOptions = useMemo(
+    () =>
+      employees.map((e) => ({
+        value: String(e._id),
+        label: `${String(e.name)} (${String(e.designation || "Washer")})`,
+      })),
+    [employees]
   );
 
   const paymentTypeOptions = [
@@ -293,12 +442,21 @@ export default function WashEntriesPage() {
             )}
             <button
               type="button"
-              className="erp-action-btn erp-action-btn--deactivate"
-              onClick={() => printReceipt(r)}
-              title="Print Receipt"
+              className="erp-action-btn"
+              onClick={() => printReceipt(r, "thermal")}
+              title="Print Thermal Slip (72mm)"
             >
               <PrintIcon size={12} style={{ display: "inline-block", marginRight: "3px" }} />
-              Print
+              Thermal
+            </button>
+            <button
+              type="button"
+              className="erp-action-btn"
+              onClick={() => printReceipt(r, "a4")}
+              title="Print A4 Receipt"
+            >
+              <PrintIcon size={12} style={{ display: "inline-block", marginRight: "3px" }} />
+              A4
             </button>
           </div>
         );
@@ -310,7 +468,7 @@ export default function WashEntriesPage() {
     <div className="erp-module">
       <ErpPageHeader
         title="Tanker Wash Operations"
-        description="Check-in tanker vehicles, assign washers, track live washing stage and print tax receipts."
+        description="Check-in tanker vehicles, assign washers, track live washing stage and print service receipts."
         actions={
           <>
             <button
@@ -396,7 +554,12 @@ export default function WashEntriesPage() {
                 value={String(form.customerId || "")}
                 options={customerOptions}
                 placeholder="-- Choose Customer --"
-                onChange={(val) => setForm({ ...form, customerId: val })}
+                onChange={(val) => {
+                  setForm((prev) => ({ ...prev, customerId: val, vehicleId: "" }));
+                  if (form.washTypeId) {
+                    updateRate(val, String(form.washTypeId));
+                  }
+                }}
               />
             </div>
 
@@ -407,7 +570,17 @@ export default function WashEntriesPage() {
                 value={String(form.vehicleId || "")}
                 options={vehicleOptions}
                 placeholder="-- Choose Vehicle --"
-                onChange={(val) => setForm({ ...form, vehicleId: val })}
+                onChange={(val) => {
+                  const veh = vehicles.find((v) => String(v._id) === val);
+                  const custId = veh && typeof veh.customerId === "object" && veh.customerId ? String((veh.customerId as { _id: string })._id) : String(veh?.customerId || "");
+                  setForm((prev) => ({
+                    ...prev,
+                    vehicleId: val,
+                    customerId: prev.customerId || custId,
+                    driverName: prev.driverName || String(veh?.driverName || ""),
+                    driverMobileNumber: prev.driverMobileNumber || String(veh?.driverMobileNumber || ""),
+                  }));
+                }}
               />
             </div>
 
@@ -419,12 +592,8 @@ export default function WashEntriesPage() {
                 options={washTypeOptions}
                 placeholder="-- Choose Wash Service --"
                 onChange={(val) => {
-                  const wt = washTypes.find((w) => String(w._id) === val);
-                  setForm({
-                    ...form,
-                    washTypeId: val,
-                    savedRate: Number(wt?.rate || 0),
-                  });
+                  setForm((prev) => ({ ...prev, washTypeId: val }));
+                  updateRate(String(form.customerId || ""), val);
                 }}
               />
             </div>
@@ -441,6 +610,16 @@ export default function WashEntriesPage() {
                 onChange={(e) =>
                   setForm({ ...form, savedRate: Number(e.target.value), rateModified: true })
                 }
+              />
+            </div>
+
+            <div className="erp-field-group">
+              <label>Assign Washer / Employee</label>
+              <ErpSelect
+                value={String(form.employeeId || "")}
+                options={employeeOptions}
+                placeholder="-- Optional Washer Assignment --"
+                onChange={(val) => setForm({ ...form, employeeId: val })}
               />
             </div>
 
