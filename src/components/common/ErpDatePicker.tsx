@@ -10,6 +10,7 @@ interface ErpDatePickerProps {
   disabled?: boolean;
   required?: boolean;
   className?: string;
+  hasError?: boolean;
 }
 
 const MONTH_NAMES = [
@@ -33,6 +34,7 @@ export default function ErpDatePicker({
   disabled = false,
   required = false,
   className = "",
+  hasError = false,
 }: ErpDatePickerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -160,7 +162,7 @@ export default function ErpDatePicker({
   return (
     <div
       ref={containerRef}
-      className={`erp-datepicker-container ${disabled ? "erp-datepicker-disabled" : ""} ${className}`}
+      className={`erp-datepicker-container ${disabled ? "erp-datepicker-disabled" : ""} ${hasError ? "erp-datepicker-container--error" : ""} ${className}`}
     >
       {required && (
         <input
@@ -178,7 +180,7 @@ export default function ErpDatePicker({
         id={id}
         type="button"
         disabled={disabled}
-        className={`erp-datepicker-trigger ${isOpen ? "erp-datepicker-trigger--open" : ""}`}
+        className={`erp-datepicker-trigger ${isOpen ? "erp-datepicker-trigger--open" : ""} ${hasError ? "erp-datepicker-trigger--error" : ""}`}
         onClick={() => setIsOpen((prev) => !prev)}
         aria-haspopup="dialog"
         aria-expanded={isOpen}

@@ -11,18 +11,14 @@ export interface ApiHealth {
   timestamp: string;
 }
 
-export type UserRole =
-  | "owner_admin"
-  | "manager"
-  | "entry_operator"
-  | "accountant"
-  | "washer";
+export type UserRole = string;
 
 export interface AuthUser {
   id: string;
   displayName: string;
   email: string;
   role: UserRole;
+  mustChangePassword: boolean;
 }
 
 export interface UserRecord extends AuthUser {
@@ -32,6 +28,7 @@ export interface UserRecord extends AuthUser {
 
 export interface RolePermissionSet {
   role: UserRole;
+  name: string;
   permissions: Record<string, string[]>;
 }
 
@@ -99,6 +96,14 @@ export function logout() {
   return apiRequest<void>("auth/logout", { method: "POST" });
 }
 
+export function changePassword(currentPassword: string, newPassword: string) {
+  return apiRequest<{ user: AuthUser }>("auth/password", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ currentPassword, newPassword }),
+  });
+}
+
 export function acceptInvitation(token: string, password: string) {
   return apiRequest<{ user: AuthUser; expiresAt: string }>("auth/invitations/accept", {
     method: "POST",
@@ -127,8 +132,52 @@ export function inviteUser(input: {
   });
 }
 
+export function deleteUserAccount(id: string) {
+  return apiRequest<void>(`users/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+}
+
+export function updateUserRole(id: string, role: UserRole) {
+  return apiRequest<{ user: UserRecord }>(`users/${encodeURIComponent(id)}/role`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ role }),
+  });
+}
+
+export function activateUserAccount(id: string, password: string) {
+  return apiRequest<{ user: UserRecord }>(`users/${encodeURIComponent(id)}/activate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ password }),
+  });
+}
+
 export function getRolePermissions() {
   return apiRequest<RolePermissionsResponse>("roles/permissions");
+}
+
+export function createRole(name: string) {
+  return apiRequest<RolePermissionSet>("roles", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+}
+
+export function renameRole(role: UserRole, name: string) {
+  return apiRequest<RolePermissionSet>(`roles/${encodeURIComponent(role)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+}
+
+export function deleteRole(role: UserRole) {
+  return apiRequest<void>(`roles/${encodeURIComponent(role)}`, {
+    method: "DELETE",
+  });
 }
 
 export function saveRolePermissions(
@@ -167,8 +216,8 @@ export function updateBusinessResource<T>(path:string, id:string, body:Record<st
   return apiRequest<{item:T}>(`${path}/${id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
 }
 
-export function deactivateBusinessResource<T>(path:string,id:string) {
-  return apiRequest<{item:T}>(`${path}/${id}`,{method:"DELETE"});
+export function deleteBusinessResource(path: string, id: string) {
+  return apiRequest<void>(`${path}/${id}`, { method: "DELETE" });
 }
 
 export interface DashboardSummary {

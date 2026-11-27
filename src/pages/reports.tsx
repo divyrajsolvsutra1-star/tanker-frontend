@@ -97,8 +97,12 @@ export default function ReportsPage() {
 
   const stats = [
     { label: "SELECTED REPORT", value: selectedReport.split("/")[1].toUpperCase(), color: "teal" as const },
-    { label: "STATUS", value: data ? "Report Ready" : "Loading", color: "active" as const },
-    { label: "TOTAL REPORTS AVAILABLE", value: "11 Reports", color: "default" as const },
+    {
+      label: "STATUS",
+      value: loading ? "Loading" : data ? "Ready" : "No data",
+      color: data ? ("active" as const) : ("default" as const),
+    },
+    { label: "TOTAL REPORTS AVAILABLE", value: REPORT_OPTIONS.length, color: "default" as const },
   ];
 
   return (

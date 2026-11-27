@@ -9,6 +9,7 @@ import {
 import type { ReactNode } from "react";
 import {
   acceptInvitation,
+  changePassword as changePasswordRequest,
   getCurrentUser,
   login,
   logout,
@@ -20,6 +21,7 @@ interface AuthContextValue {
   isLoading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   activateAccount: (token: string, password: string) => Promise<void>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -64,6 +66,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  const changePassword = useCallback(
+    async (currentPassword: string, newPassword: string) => {
+      const result = await changePasswordRequest(currentPassword, newPassword);
+      setUser(result.user);
+    },
+    [],
+  );
+
   const signOut = useCallback(async () => {
     try {
       await logout();
@@ -73,8 +83,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ user, isLoading, signIn, activateAccount, signOut }),
-    [user, isLoading, signIn, activateAccount, signOut],
+    () => ({ user, isLoading, signIn, activateAccount, changePassword, signOut }),
+    [user, isLoading, signIn, activateAccount, changePassword, signOut],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -84,7 +84,7 @@ export default function DailySalesPage() {
       header: "WASH TYPE",
       cell: (row: Record<string, unknown>) => {
         const w = row.washType as { name?: string } | undefined;
-        return <ErpStatusBadge status={w?.name || "Standard Wash"} type="pill" />;
+        return <ErpStatusBadge status={w?.name || "—"} type="pill" />;
       },
     },
     {
@@ -100,7 +100,7 @@ export default function DailySalesPage() {
       id: "status",
       header: "STATUS",
       cell: (row: Record<string, unknown>) => (
-        <ErpStatusBadge status={String(row.status || "completed")} />
+        <ErpStatusBadge status={String(row.status || "—")} />
       ),
     },
   ];

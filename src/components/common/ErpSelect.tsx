@@ -15,6 +15,7 @@ interface ErpSelectProps {
   disabled?: boolean;
   required?: boolean;
   className?: string;
+  hasError?: boolean;
 }
 
 export default function ErpSelect({
@@ -26,6 +27,7 @@ export default function ErpSelect({
   disabled = false,
   required = false,
   className = "",
+  hasError = false,
 }: ErpSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [filterQuery, setFilterQuery] = useState("");
@@ -96,7 +98,7 @@ export default function ErpSelect({
   return (
     <div
       ref={containerRef}
-      className={`erp-select-container ${disabled ? "erp-select-disabled" : ""} ${className}`}
+      className={`erp-select-container ${disabled ? "erp-select-disabled" : ""} ${hasError ? "erp-select-container--error" : ""} ${className}`}
     >
       {/* Hidden input for form validation if required */}
       {required && (
@@ -115,7 +117,7 @@ export default function ErpSelect({
         id={id}
         type="button"
         disabled={disabled}
-        className={`erp-select-trigger ${isOpen ? "erp-select-trigger--open" : ""}`}
+        className={`erp-select-trigger ${isOpen ? "erp-select-trigger--open" : ""} ${hasError ? "erp-select-trigger--error" : ""}`}
         onClick={() => setIsOpen((prev) => !prev)}
         aria-haspopup="listbox"
         aria-expanded={isOpen}

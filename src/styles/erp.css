@@ -107,7 +107,7 @@ main.app-layout {
   gap: 10px;
   padding: 8px 12px;
   color: #94a3b8;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
   border-radius: 8px;
   transition: all 0.15s ease;
@@ -165,7 +165,7 @@ main.app-layout {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .topbar-section-pill {
@@ -327,7 +327,7 @@ main.app-layout {
 }
 
 .erp-title {
-  font-size: 26px;
+  font-size: 24px;
   font-weight: 700;
   color: #0f172a;
   letter-spacing: -0.02em;
@@ -335,7 +335,7 @@ main.app-layout {
 }
 
 .erp-subtitle {
-  font-size: 13.5px;
+  font-size: 12.5px;
   color: #64748b;
   margin: 0;
   line-height: 1.5;
@@ -351,7 +351,7 @@ main.app-layout {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   padding: 9px 18px;
   border-radius: 8px;
@@ -412,7 +412,7 @@ main.app-layout {
 }
 
 .erp-stat-value {
-  font-size: 26px;
+  font-size: 24px;
   font-weight: 700;
   color: #0f172a;
   line-height: 1.1;
@@ -445,7 +445,7 @@ main.app-layout {
   background: none;
   border: none;
   padding: 10px 4px;
-  font-size: 13.5px;
+  font-size: 12.5px;
   font-weight: 600;
   color: #64748b;
   cursor: pointer;
@@ -476,7 +476,7 @@ main.app-layout {
 .erp-alert {
   padding: 10px 16px;
   border-radius: 8px;
-  font-size: 13px;
+  font-size: 12px;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -503,6 +503,12 @@ main.app-layout {
   overflow: hidden;
 }
 
+.erp-card--popover-visible {
+  position: relative;
+  z-index: 1;
+  overflow: visible;
+}
+
 .erp-table-toolbar {
   padding: 14px 20px;
   border-bottom: 1px solid #f1f5f9;
@@ -514,7 +520,7 @@ main.app-layout {
 }
 
 .erp-toolbar-title {
-  font-size: 13.5px;
+  font-size: 12.5px;
   color: #475569;
 }
 
@@ -543,7 +549,7 @@ main.app-layout {
   padding: 8px 30px 8px 34px;
   border: 1.5px solid #e2e8f0;
   border-radius: 8px;
-  font-size: 13px;
+  font-size: 12px;
   outline: none;
   transition: all 0.15s ease;
   background: #ffffff;
@@ -578,7 +584,7 @@ main.app-layout {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 12.5px;
+  font-size: 11.5px;
   color: #64748b;
   background: #fbfcfd;
 }
@@ -590,7 +596,7 @@ main.app-layout {
   gap: 6px;
   padding: 3px 10px;
   border-radius: 999px;
-  font-size: 11.5px;
+  font-size: 11px;
   font-weight: 600;
 }
 
@@ -624,7 +630,7 @@ main.app-layout {
   display: inline-block;
   padding: 2px 8px;
   border-radius: 6px;
-  font-size: 11.5px;
+  font-size: 11px;
   font-weight: 600;
   text-transform: capitalize;
 }
@@ -642,10 +648,10 @@ main.app-layout {
 }
 
 .erp-cell-number {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-montserrat), system-ui, sans-serif;
   font-weight: 600;
   color: #0f172a;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .erp-table-actions {
@@ -657,34 +663,48 @@ main.app-layout {
 .erp-action-btn {
   padding: 4px 10px;
   border-radius: 6px;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.15s ease;
   border: 1px solid transparent;
 }
 
+.erp-action-btn--icon {
+  display: inline-flex;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  align-items: center;
+  justify-content: center;
+}
+
+.erp-action-btn--icon:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 .erp-action-btn--edit {
-  background: #f0fdfa;
-  color: #0f766e;
-  border-color: #ccfbf1;
-}
-
-.erp-action-btn--edit:hover {
-  background: #ccfbf1;
-  color: #115e59;
-}
-
-.erp-action-btn--deactivate {
   background: #f8fafc;
-  color: #64748b;
+  color: #475569;
   border-color: #e2e8f0;
 }
 
-.erp-action-btn--deactivate:hover {
-  background: #fee2e2;
-  color: #b91c1c;
-  border-color: #fecaca;
+.erp-action-btn--edit:hover {
+  background: #e2e8f0;
+  color: #334155;
+}
+
+.erp-action-btn--delete {
+  background: #f8fafc;
+  color: #475569;
+  border-color: #e2e8f0;
+}
+
+.erp-action-btn--delete:hover {
+  background: #e2e8f0;
+  color: #334155;
+  border-color: #cbd5e1;
 }
 
 /* Slide-over Drawer for Add/Edit */
@@ -719,14 +739,14 @@ main.app-layout {
 }
 
 .erp-drawer-header h2 {
-  font-size: 19px;
+  font-size: 18px;
   font-weight: 700;
   color: #0f172a;
   margin: 0 0 4px;
 }
 
 .erp-drawer-header p {
-  font-size: 13px;
+  font-size: 12px;
   color: #64748b;
   margin: 0;
 }
@@ -769,7 +789,7 @@ main.app-layout {
 }
 
 .erp-field-group label {
-  font-size: 12.5px;
+  font-size: 11.5px;
   font-weight: 600;
   color: #334155;
 }
@@ -779,11 +799,54 @@ main.app-layout {
   margin-left: 3px;
 }
 
+/* Form Field Error States & Required Feedback */
+.erp-field-group--error label {
+  color: #dc2626 !important;
+}
+
+.erp-field-group--error .erp-input,
+.erp-input--error {
+  border-color: #ef4444 !important;
+  background-color: #fef2f2 !important;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.12) !important;
+}
+
+.erp-select-trigger--error,
+.erp-field-group--error .erp-select-trigger {
+  border-color: #ef4444 !important;
+  background-color: #fef2f2 !important;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.12) !important;
+}
+
+.erp-datepicker-trigger--error,
+.erp-field-group--error .erp-datepicker-trigger {
+  border-color: #ef4444 !important;
+  background-color: #fef2f2 !important;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.12) !important;
+}
+
+.erp-field-error-msg {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #dc2626;
+  margin-top: 2px;
+  animation: fadeIn 0.15s ease;
+}
+
+.erp-field-error-msg::before {
+  content: "•";
+  font-size: 14px;
+  line-height: 1;
+}
+
 .erp-input {
   padding: 10px 14px;
   border: 1.5px solid #e2e8f0;
   border-radius: 8px;
-  font-size: 13.5px;
+  font-size: 12.5px;
   color: #0f172a;
   outline: none;
   transition: all 0.15s ease;

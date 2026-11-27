@@ -42,8 +42,16 @@ export default function ReturnsPage() {
 
   const stats = [
     { label: "RETURN / CANCELLED", value: items.length },
-    { label: "PROCESSED REFUNDS", value: 0, color: "active" as const },
-    { label: "PENDING REVIEW", value: items.length, color: "inactive" as const },
+    {
+      label: "CANCELLED",
+      value: items.filter((item) => String(item.status).toLowerCase() === "cancelled").length,
+      color: "inactive" as const,
+    },
+    {
+      label: "REFUNDED",
+      value: items.filter((item) => String(item.status).toLowerCase() === "refunded").length,
+      color: "active" as const,
+    },
   ];
 
   const columns = [
@@ -63,7 +71,7 @@ export default function ReturnsPage() {
     {
       id: "reason",
       header: "REASON / REMARK",
-      cell: (row: Record<string, unknown>) => String(row.notes || row.remarks || "Cancelled by operator"),
+      cell: (row: Record<string, unknown>) => String(row.notes || row.remarks || "—"),
     },
     {
       id: "amount",
@@ -77,7 +85,9 @@ export default function ReturnsPage() {
     {
       id: "status",
       header: "STATUS",
-      cell: () => <ErpStatusBadge status="inactive" label="Cancelled" />,
+      cell: (row: Record<string, unknown>) => (
+        <ErpStatusBadge status={String(row.status || "—")} />
+      ),
     },
   ];
 
@@ -104,7 +114,7 @@ export default function ReturnsPage() {
             caption="Returns Register"
             columns={columns}
             emptyMessage={loading ? "Loading records..." : "No returns or cancelled washes recorded."}
-            getRowKey={(row) => String(row._id || Math.random())}
+            getRowKey={(row) => String(row._id)}
             rows={filteredItems}
           />
         </div>

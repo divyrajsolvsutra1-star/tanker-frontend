@@ -27,7 +27,6 @@ export default function AccountingPage() {
   const stats = [
     { label: "CHART OF ACCOUNTS", value: accountsCount, color: "teal" as const },
     { label: "POSTED JOURNALS", value: journalsCount, color: "active" as const },
-    { label: "SYSTEM STATUS", value: "Balanced", color: "active" as const },
   ];
 
   return (
@@ -76,7 +75,7 @@ export default function AccountingPage() {
                       </strong>
                       <span style={{ color: "#334155", fontSize: "13px" }}>{String(a.name)}</span>
                     </div>
-                    <ErpStatusBadge status={String(a.type || "Asset")} type="pill" />
+                    <ErpStatusBadge status={String(a.type || "—")} type="pill" />
                   </div>
                 ))}
               </div>
@@ -118,7 +117,7 @@ export default function AccountingPage() {
                       <span className="erp-pill erp-pill--company">{String(j.voucherType)}</span>
                     </div>
                     <div style={{ color: "#64748b", fontSize: "12.5px" }}>
-                      {String(j.narration || "General transaction journal entry")}
+                      {String(j.narration || "—")}
                     </div>
                   </div>
                 ))}

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { FormEvent, ReactNode } from "react";
+import type { FormEvent } from "react";
 import Button from "@/components/common/Button";
 import DataTable from "@/components/common/DataTable";
 import ErpPageHeader from "@/components/common/ErpPageHeader";
@@ -11,15 +11,15 @@ import ErpStatusBadge from "@/components/common/ErpStatusBadge";
 import ErpSelect from "@/components/common/ErpSelect";
 import ErpDatePicker from "@/components/common/ErpDatePicker";
 import {
+  AlertTriangleIcon,
   RefreshIcon,
   PlusIcon,
-  EditIcon,
-  TrashIcon,
 } from "@/components/common/Icons";
+import IconActionButton from "@/components/common/IconActionButton";
 import {
   ApiError,
   createBusinessResource,
-  deactivateBusinessResource,
+  deleteBusinessResource,
   getBusinessResource,
   updateBusinessResource,
 } from "@/lib/api";
@@ -52,6 +52,8 @@ export default function CrudModule({ title, description, path, fields }: Props) 
   const [loading, setLoading] = useState(true);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -72,6 +74,17 @@ export default function CrudModule({ title, description, path, fields }: Props) 
   useEffect(() => {
     void Promise.resolve().then(load);
   }, [load]);
+
+  useEffect(() => {
+    if (!pendingDeleteId) return;
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setPendingDeleteId(null);
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [pendingDeleteId]);
 
   // Tab Filtering
   const filteredItems = useMemo(() => {
@@ -130,10 +143,11 @@ export default function CrudModule({ title, description, path, fields }: Props) 
     setForm({});
     setError("");
     setSaved("");
+    setFieldErrors({});
     setIsDrawerOpen(true);
   }
 
-  function handleOpenEdit(id: string, row: Record<string, unknown>) {
+  const handleOpenEdit = useCallback((id: string, row: Record<string, unknown>) => {
     setEditing(id);
     const next: Record<string, string | number> = {};
     fields.forEach((f) => {
@@ -145,19 +159,40 @@ export default function CrudModule({ title, description, path, fields }: Props) 
     setForm(next);
     setError("");
     setSaved("");
+    setFieldErrors({});
     setIsDrawerOpen(true);
-  }
+  }, [fields]);
 
   function handleCloseDrawer() {
     setIsDrawerOpen(false);
     setEditing(null);
     setForm({});
+    setFieldErrors({});
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
     setSaved("");
+
+    // Required fields client-side validation
+    const errors: Record<string, string> = {};
+    fields.forEach((f) => {
+      if (f.required) {
+        const val = form[f.name];
+        if (val === undefined || val === null || String(val).trim() === "") {
+          errors[f.name] = `${f.label} is required. Please fill this field.`;
+        }
+      }
+    });
+
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      setError("Please fill in all required fields marked with * before saving.");
+      return;
+    }
+
+    setFieldErrors({});
     setIsSubmitting(true);
     try {
       const body = { ...form };
@@ -177,16 +212,17 @@ export default function CrudModule({ title, description, path, fields }: Props) 
     }
   }
 
-  async function deactivate(id: string) {
-    if (!window.confirm("Are you sure you want to change the status of this record?")) return;
+  const deleteRecord = useCallback(async (id: string) => {
+    setError("");
+    setSaved("");
     try {
-      await deactivateBusinessResource(path, id);
-      setSaved("Status updated.");
+      await deleteBusinessResource(path, id);
+      setSaved("Record deleted permanently.");
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not update status.");
+      setError(err instanceof ApiError ? err.message : "Could not delete record.");
     }
-  }
+  }, [load, path]);
 
   // Columns for the modern table
   const columns = useMemo(() => {
@@ -244,29 +280,22 @@ export default function CrudModule({ title, description, path, fields }: Props) 
           const id = String(row._id);
           return (
             <div className="erp-table-actions">
-              <button
-                type="button"
-                className="erp-action-btn erp-action-btn--edit"
+              <IconActionButton
+                action="edit"
                 onClick={() => handleOpenEdit(id, row)}
                 title="Edit record"
-              >
-                <EditIcon size={13} style={{ display: "inline-block", marginRight: "4px" }} />
-                Edit
-              </button>
-              <button
-                type="button"
-                className="erp-action-btn erp-action-btn--deactivate"
-                onClick={() => void deactivate(id)}
-                title="Toggle status"
-              >
-                Deactivate
-              </button>
+              />
+              <IconActionButton
+                action="delete"
+                onClick={() => setPendingDeleteId(id)}
+                title="Permanently delete record"
+              />
             </div>
           );
         },
       },
     ];
-  }, [fields]);
+  }, [fields, handleOpenEdit]);
 
   return (
     <div className="erp-module">
@@ -358,56 +387,90 @@ export default function CrudModule({ title, description, path, fields }: Props) 
       >
         <form className="erp-drawer-form" onSubmit={submit}>
           <div className="erp-form-grid">
-            {fields.map((field) => (
-              <div
-                key={field.name}
-                className={`erp-field-group ${
-                  field.name === "address" || field.name === "notes" ? "erp-field-group--full" : ""
-                }`}
-              >
-                <label htmlFor={`erp-input-${field.name}`}>
-                  {field.label}
-                  {field.required && <span className="erp-required-star">*</span>}
-                </label>
+            {fields.map((field) => {
+              const hasErr = Boolean(fieldErrors[field.name]);
+              return (
+                <div
+                  key={field.name}
+                  className={`erp-field-group ${hasErr ? "erp-field-group--error" : ""} ${
+                    field.name === "address" || field.name === "notes" ? "erp-field-group--full" : ""
+                  }`}
+                >
+                  <label htmlFor={`erp-input-${field.name}`}>
+                    {field.label}
+                    {field.required && <span className="erp-required-star">*</span>}
+                  </label>
 
-                {/* Custom ErpSelect Component */}
-                {field.options ? (
-                  <ErpSelect
-                    id={`erp-input-${field.name}`}
-                    required={field.required}
-                    value={String(form[field.name] ?? "")}
-                    options={field.options}
-                    placeholder={`Select ${field.label}...`}
-                    onChange={(val) => setForm({ ...form, [field.name]: val })}
-                  />
-                ) : field.type === "date" || field.type === "month" ? (
-                  /* Custom ErpDatePicker Component */
-                  <ErpDatePicker
-                    id={`erp-input-${field.name}`}
-                    required={field.required}
-                    type={field.type}
-                    value={String(form[field.name] ?? "")}
-                    onChange={(val) => setForm({ ...form, [field.name]: val })}
-                  />
-                ) : (
-                  <input
-                    id={`erp-input-${field.name}`}
-                    required={field.required}
-                    min={field.min}
-                    type={field.type || "text"}
-                    placeholder={`Enter ${field.label.toLowerCase()}...`}
-                    value={String(form[field.name] ?? "")}
-                    onChange={(e) =>
-                      setForm({
-                        ...form,
-                        [field.name]: field.type === "number" ? Number(e.target.value) : e.target.value,
-                      })
-                    }
-                    className="erp-input"
-                  />
-                )}
-              </div>
-            ))}
+                  {/* Custom ErpSelect Component */}
+                  {field.options ? (
+                    <ErpSelect
+                      id={`erp-input-${field.name}`}
+                      required={field.required}
+                      hasError={hasErr}
+                      value={String(form[field.name] ?? "")}
+                      options={field.options}
+                      placeholder={`Select ${field.label}...`}
+                      onChange={(val) => {
+                        setForm({ ...form, [field.name]: val });
+                        if (fieldErrors[field.name]) {
+                          setFieldErrors((prev) => {
+                            const next = { ...prev };
+                            delete next[field.name];
+                            return next;
+                          });
+                        }
+                      }}
+                    />
+                  ) : field.type === "date" || field.type === "month" ? (
+                    /* Custom ErpDatePicker Component */
+                    <ErpDatePicker
+                      id={`erp-input-${field.name}`}
+                      required={field.required}
+                      hasError={hasErr}
+                      type={field.type}
+                      value={String(form[field.name] ?? "")}
+                      onChange={(val) => {
+                        setForm({ ...form, [field.name]: val });
+                        if (fieldErrors[field.name]) {
+                          setFieldErrors((prev) => {
+                            const next = { ...prev };
+                            delete next[field.name];
+                            return next;
+                          });
+                        }
+                      }}
+                    />
+                  ) : (
+                    <input
+                      id={`erp-input-${field.name}`}
+                      required={field.required}
+                      min={field.min}
+                      type={field.type || "text"}
+                      placeholder={`Enter ${field.label.toLowerCase()}...`}
+                      value={String(form[field.name] ?? "")}
+                      onChange={(e) => {
+                        setForm({
+                          ...form,
+                          [field.name]: field.type === "number" ? Number(e.target.value) : e.target.value,
+                        });
+                        if (fieldErrors[field.name]) {
+                          setFieldErrors((prev) => {
+                            const next = { ...prev };
+                            delete next[field.name];
+                            return next;
+                          });
+                        }
+                      }}
+                      className={`erp-input ${hasErr ? "erp-input--error" : ""}`}
+                    />
+                  )}
+
+                  {hasErr && (
+                    <span className="erp-field-error-msg">{fieldErrors[field.name]}</span>
+                  )}
+                </div>
+              );
+            })}
           </div>
 
           <div className="erp-drawer-footer">
@@ -425,6 +488,58 @@ export default function CrudModule({ title, description, path, fields }: Props) 
           </div>
         </form>
       </ErpDrawer>
+
+      {pendingDeleteId ? (
+        <div
+          className="modal-overlay"
+          onClick={() => setPendingDeleteId(null)}
+        >
+          <div
+            aria-describedby="delete-confirm-description"
+            aria-labelledby="delete-confirm-title"
+            aria-modal="true"
+            className="modal"
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+          >
+            <div className="modal-header">
+              <h2
+                className="modal-title"
+                id="delete-confirm-title"
+                style={{ display: "flex", alignItems: "center", gap: "8px" }}
+              >
+                <AlertTriangleIcon size={20} color="#dc2626" />
+                Confirm permanent delete
+              </h2>
+            </div>
+            <div className="modal-body">
+              <p id="delete-confirm-description">
+                This will permanently delete the record. Deletion is blocked while other records still reference it.
+              </p>
+            </div>
+            <div className="modal-footer">
+              <button
+                className="btn btn-secondary"
+                onClick={() => setPendingDeleteId(null)}
+                type="button"
+              >
+                Cancel
+              </button>
+              <button
+                className="btn btn-danger"
+                onClick={() => {
+                  const id = pendingDeleteId;
+                  setPendingDeleteId(null);
+                  void deleteRecord(id);
+                }}
+                type="button"
+              >
+                Delete permanently
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -132,6 +132,10 @@ export default function Layout({ children, title, description }: LayoutProps) {
                     <li key={item.href} className="sidebar-item">
                       <Link
                         href={item.href}
+                        prefetch
+                        onMouseEnter={() => {
+                          void router.prefetch(item.href);
+                        }}
                         className={`sidebar-link ${isActive ? "active" : ""}`}
                       >
                         <span className="sidebar-icon">{item.icon}</span>

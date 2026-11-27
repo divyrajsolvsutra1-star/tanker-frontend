@@ -5,7 +5,8 @@ import ErpDrawer from "@/components/common/ErpDrawer";
 import ErpStatusBadge from "@/components/common/ErpStatusBadge";
 import DataTable from "@/components/common/DataTable";
 import Button from "@/components/common/Button";
-import { EditIcon, RefreshIcon } from "@/components/common/Icons";
+import IconActionButton from "@/components/common/IconActionButton";
+import { RefreshIcon } from "@/components/common/Icons";
 import { apiRequest, getBusinessResource } from "@/lib/api";
 
 type WashType = {
@@ -111,7 +112,7 @@ export default function WashTypesPage() {
       id: "description",
       header: "DESCRIPTION",
       cell: (r: WashType) => (
-        <span style={{ color: "#475569" }}>{r.description || "Tanker wash service"}</span>
+        <span style={{ color: "#475569" }}>{r.description || "—"}</span>
       ),
     },
     {
@@ -138,15 +139,11 @@ export default function WashTypesPage() {
       header: "ACTIONS",
       align: "right" as const,
       cell: (r: WashType) => (
-        <button
-          type="button"
-          className="erp-btn erp-btn--secondary"
-          style={{ padding: "4px 10px", fontSize: "12px" }}
+        <IconActionButton
+          action="edit"
+          title="Configure company rates"
           onClick={() => openRateConfig(r)}
-        >
-          <EditIcon size={12} style={{ display: "inline-block", marginRight: "4px" }} />
-          Configure Company Rates
-        </button>
+        />
       ),
     },
   ];

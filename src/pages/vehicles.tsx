@@ -12,7 +12,9 @@ export default function VehiclesPage() {
         setCustomerOptions(
           list.map((c) => ({
             value: String(c._id),
-            label: `${String(c.name)} (${String(c.customerType || "Account")})`,
+            label: c.customerType
+              ? `${String(c.name)} (${String(c.customerType)})`
+              : String(c.name),
           }))
         );
       })

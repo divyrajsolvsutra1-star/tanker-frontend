@@ -1,9 +1,19 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import ErpPageHeader from "@/components/common/ErpPageHeader";
-import { CheckCircleIcon, RefreshIcon, RolesIcon, SpinnerIcon } from "@/components/common/Icons";
+import IconActionButton from "@/components/common/IconActionButton";
+import {
+  CheckCircleIcon,
+  PlusIcon,
+  RefreshIcon,
+  SpinnerIcon,
+  TrashIcon,
+} from "@/components/common/Icons";
 import {
   ApiError,
+  createRole,
+  deleteRole,
   getRolePermissions,
+  renameRole,
   saveRolePermissions,
 } from "@/lib/api";
 import type {
@@ -12,14 +22,6 @@ import type {
   UserRole,
 } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
-
-const roleLabels: Record<UserRole, string> = {
-  owner_admin: "Owner / Admin",
-  manager: "Manager",
-  entry_operator: "Entry Operator",
-  accountant: "Accountant",
-  washer: "Washer / Employee",
-};
 
 const moduleLabels: Record<string, string> = {
   dashboard: "Dashboard",
@@ -44,6 +46,7 @@ const actionLabels: Record<string, string> = {
   read: "View",
   create: "Create",
   update: "Edit",
+  delete: "Delete",
   deactivate: "Deactivate",
   approve: "Approve",
   export: "Export",
@@ -56,10 +59,17 @@ export default function RolesPage() {
   const [savedMessage, setSavedMessage] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [savingRole, setSavingRole] = useState<UserRole | null>(null);
+  const [editingRole, setEditingRole] = useState<UserRole | null>(null);
+  const [permissionsDraft, setPermissionsDraft] = useState<Record<string, string[]> | null>(null);
+  const [roleNameDraft, setRoleNameDraft] = useState("");
+  const [roleDialog, setRoleDialog] = useState<{ role: UserRole | null } | null>(null);
+  const [savingRoleDefinition, setSavingRoleDefinition] = useState(false);
+  const [roleToDelete, setRoleToDelete] = useState<RolePermissionSet | null>(null);
+  const [deletingRole, setDeletingRole] = useState(false);
 
-  function loadPermissions() {
+  const loadPermissions = useCallback(() => {
     setIsLoading(true);
-    getRolePermissions()
+    void getRolePermissions()
       .then((result) => {
         setSettings(result);
         setErrorMessage("");
@@ -74,11 +84,28 @@ export default function RolesPage() {
       .finally(() => {
         setIsLoading(false);
       });
-  }
+  }, []);
 
   useEffect(() => {
-    loadPermissions();
-  }, []);
+    void Promise.resolve().then(loadPermissions);
+  }, [loadPermissions]);
+
+  function openPermissions(role: RolePermissionSet) {
+    setEditingRole(role.role);
+    setPermissionsDraft(
+      Object.fromEntries(
+        Object.entries(role.permissions).map(([moduleName, actions]) => [
+          moduleName,
+          [...actions],
+        ]),
+      ),
+    );
+  }
+
+  function closePermissions() {
+    setEditingRole(null);
+    setPermissionsDraft(null);
+  }
 
   function togglePermission(
     roleName: UserRole,
@@ -86,27 +113,16 @@ export default function RolesPage() {
     action: string,
     enabled: boolean,
   ) {
-    setSettings((current) => {
+    if (editingRole !== roleName) return;
+    setPermissionsDraft((current) => {
       if (!current) return current;
-
+      const currentActions = current[moduleName] ?? [];
+      const nextActions = enabled
+        ? Array.from(new Set([...currentActions, action]))
+        : currentActions.filter((item) => item !== action);
       return {
         ...current,
-        roles: current.roles.map((role) => {
-          if (role.role !== roleName) return role;
-
-          const currentActions = role.permissions[moduleName] ?? [];
-          const nextActions = enabled
-            ? Array.from(new Set([...currentActions, action]))
-            : currentActions.filter((item) => item !== action);
-
-          return {
-            ...role,
-            permissions: {
-              ...role.permissions,
-              [moduleName]: nextActions,
-            },
-          };
-        }),
+        [moduleName]: nextActions,
       };
     });
   }
@@ -128,7 +144,8 @@ export default function RolesPage() {
             }
           : current,
       );
-      setSavedMessage(`${roleLabels[role.role]} permissions saved successfully.`);
+      setSavedMessage(`${role.name} permissions saved successfully.`);
+      closePermissions();
       setTimeout(() => setSavedMessage(""), 4000);
     } catch (error) {
       setErrorMessage(
@@ -138,6 +155,57 @@ export default function RolesPage() {
       );
     } finally {
       setSavingRole(null);
+    }
+  }
+
+  function openRoleDialog(role: RolePermissionSet | null) {
+    setRoleDialog({ role: role?.role ?? null });
+    setRoleNameDraft(role?.name ?? "");
+    setErrorMessage("");
+  }
+
+  async function saveRoleDefinition() {
+    if (!roleDialog) return;
+    setSavingRoleDefinition(true);
+    setErrorMessage("");
+    setSavedMessage("");
+
+    try {
+      if (roleDialog.role) {
+        await renameRole(roleDialog.role, roleNameDraft);
+        setSavedMessage("Role updated successfully.");
+      } else {
+        await createRole(roleNameDraft);
+        setSavedMessage("Role created successfully.");
+      }
+      setRoleDialog(null);
+      await loadPermissions();
+    } catch (error) {
+      setErrorMessage(
+        error instanceof ApiError ? error.message : "Could not save this role.",
+      );
+    } finally {
+      setSavingRoleDefinition(false);
+    }
+  }
+
+  async function removeRole() {
+    if (!roleToDelete) return;
+    setDeletingRole(true);
+    setErrorMessage("");
+    setSavedMessage("");
+
+    try {
+      await deleteRole(roleToDelete.role);
+      setRoleToDelete(null);
+      setSavedMessage(`${roleToDelete.name} role deleted.`);
+      await loadPermissions();
+    } catch (error) {
+      setErrorMessage(
+        error instanceof ApiError ? error.message : "Could not delete this role.",
+      );
+    } finally {
+      setDeletingRole(false);
     }
   }
 
@@ -154,21 +222,33 @@ export default function RolesPage() {
     );
   }
 
+  const selectedRole = settings?.roles.find((role) => role.role === editingRole);
+
   return (
     <div className="erp-module">
       <ErpPageHeader
         title="Role-Based Access Control"
         description="Configure granular module permissions and operational authorization matrices for each staff role."
         actions={
-          <button
-            type="button"
-            className="erp-btn erp-btn--secondary"
-            onClick={loadPermissions}
-            disabled={isLoading}
-          >
-            <RefreshIcon size={14} />
-            <span>Reload Roles</span>
-          </button>
+          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+            <button
+              type="button"
+              className="erp-btn erp-btn--secondary"
+              onClick={() => openRoleDialog(null)}
+            >
+              <PlusIcon size={16} />
+              <span>Create role</span>
+            </button>
+            <button
+              type="button"
+              className="erp-btn erp-btn--secondary"
+              onClick={() => void loadPermissions()}
+              disabled={isLoading}
+            >
+              <RefreshIcon size={16} />
+              <span>Reload Roles</span>
+            </button>
+          </div>
         }
       />
 
@@ -191,61 +271,136 @@ export default function RolesPage() {
           <span>Loading security matrices...</span>
         </div>
       ) : settings ? (
-        <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
-          {settings.roles.map((role) => (
-            <div className="erp-card" key={role.role} style={{ overflow: "hidden" }}>
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  padding: "16px 20px",
-                  background: "#f8fafc",
-                  borderBottom: "1px solid #e2e8f0",
-                }}
-              >
-                <div>
-                  <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 700, color: "#0f172a" }}>
-                    {roleLabels[role.role]}
-                  </h3>
-                  <p style={{ margin: "2px 0 0", fontSize: "12px", color: "#64748b" }}>
-                    Actions left unchecked are denied at the API gateway.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  className="erp-btn erp-btn--primary"
-                  disabled={savingRole !== null}
-                  onClick={() => void savePermissions(role)}
-                >
-                  {savingRole === role.role ? "Saving Matrix..." : `Save ${roleLabels[role.role]}`}
-                </button>
-              </div>
+        <div className="erp-card" style={{ overflow: "hidden" }}>
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
+              <thead>
+                <tr style={{ background: "#f8fafc", color: "#475569", fontSize: "12px" }}>
+                  <th scope="col" style={{ padding: "14px 20px" }}>Role</th>
+                  <th scope="col" style={{ padding: "14px 20px" }}>Assigned permissions</th>
+                  <th scope="col" style={{ padding: "14px 20px", textAlign: "right" }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {settings.roles.length === 0 && (
+                  <tr>
+                    <td colSpan={3} style={{ padding: "24px", textAlign: "center", color: "#64748b" }}>
+                      No roles yet. Create a role to get started.
+                    </td>
+                  </tr>
+                )}
+                {settings.roles.map((role) => {
+                  const grantedActions = Object.values(role.permissions).reduce(
+                    (total, actions) => total + actions.length,
+                    0,
+                  );
+                  const grantedModules = Object.values(role.permissions).filter(
+                    (actions) => actions.length > 0,
+                  ).length;
 
+                  return (
+                    <tr key={role.role} style={{ borderTop: "1px solid #e2e8f0" }}>
+                      <th scope="row" style={{ padding: "16px 20px", color: "#0f172a", fontSize: "14px" }}>
+                        {role.name}
+                      </th>
+                      <td style={{ padding: "16px 20px", color: "#64748b", fontSize: "13px" }}>
+                        {grantedModules} modules - {grantedActions} actions
+                      </td>
+                      <td style={{ padding: "16px 20px", textAlign: "right" }}>
+                        <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px", flexWrap: "wrap" }}>
+                          <IconActionButton
+                            action="edit"
+                            onClick={() => openRoleDialog(role)}
+                            title="Edit role name"
+                          />
+                          <button
+                            type="button"
+                            className="erp-btn erp-btn--secondary"
+                            onClick={() => openPermissions(role)}
+                          >
+                            Manage permissions
+                          </button>
+                          <IconActionButton
+                            action="delete"
+                            onClick={() => {
+                              setErrorMessage("");
+                              setRoleToDelete(role);
+                            }}
+                            title="Delete role"
+                          />
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : null}
+
+      {selectedRole && settings && (
+        <div
+          className="modal-overlay"
+          onClick={() => savingRole === null && closePermissions()}
+        >
+          <section
+            aria-labelledby="role-permissions-title"
+            aria-modal="true"
+            className="modal"
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+            style={{ maxWidth: "1000px", width: "calc(100% - 32px)", maxHeight: "90vh", display: "flex", flexDirection: "column" }}
+          >
+            <header className="modal-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "16px" }}>
+              <div>
+                <h2 className="modal-title" id="role-permissions-title">
+                  {selectedRole.name} permissions
+                </h2>
+                <p style={{ margin: "6px 0 0", color: "#64748b", fontSize: "12px" }}>
+                  Unchecked actions are denied. Dashboard data remains a read-only summary.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="erp-btn erp-btn--secondary"
+                onClick={closePermissions}
+                disabled={savingRole !== null}
+                aria-label="Close permissions"
+              >
+                Close
+              </button>
+            </header>
+
+            <div className="modal-body" style={{ overflowY: "auto" }}>
+              {errorMessage && (
+                <div className="erp-alert erp-alert--danger" role="alert" style={{ marginBottom: "12px" }}>
+                  {errorMessage}
+                </div>
+              )}
               <div
                 style={{
-                  padding: "20px",
                   display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-                  gap: "16px",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+                  gap: "12px",
                 }}
               >
                 {settings.modules.map((moduleName) => (
-                  <div
+                  <fieldset
                     key={moduleName}
                     style={{
-                      border: "1px solid #f1f5f9",
+                      minWidth: 0,
+                      border: "1px solid #e2e8f0",
                       borderRadius: "8px",
-                      padding: "14px",
-                      background: "#ffffff",
+                      padding: "12px",
                     }}
                   >
-                    <div style={{ fontSize: "13px", fontWeight: 700, color: "#1e293b", marginBottom: "10px" }}>
+                    <legend style={{ padding: "0 4px", fontSize: "13px", fontWeight: 700, color: "#1e293b" }}>
                       {moduleLabels[moduleName] ?? moduleName}
-                    </div>
+                    </legend>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
                       {settings.actions.map((action) => {
-                        const isChecked = (role.permissions[moduleName] ?? []).includes(action);
+                        const isChecked = (permissionsDraft?.[moduleName] ?? []).includes(action);
                         return (
                           <label
                             key={action}
@@ -269,7 +424,7 @@ export default function RolesPage() {
                               checked={isChecked}
                               onChange={(event) =>
                                 togglePermission(
-                                  role.role,
+                                  selectedRole.role,
                                   moduleName,
                                   action,
                                   event.target.checked,
@@ -282,13 +437,154 @@ export default function RolesPage() {
                         );
                       })}
                     </div>
-                  </div>
+                  </fieldset>
                 ))}
               </div>
             </div>
-          ))}
+
+            <footer className="modal-footer">
+              <button
+                type="button"
+                className="erp-btn erp-btn--secondary"
+                onClick={closePermissions}
+                disabled={savingRole !== null}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="erp-btn erp-btn--primary"
+                disabled={savingRole !== null}
+                onClick={() =>
+                  void savePermissions({
+                    role: selectedRole.role,
+                    name: selectedRole.name,
+                    permissions: permissionsDraft ?? selectedRole.permissions,
+                  })
+                }
+              >
+                {savingRole === selectedRole.role ? "Saving..." : "Save permissions"}
+              </button>
+            </footer>
+          </section>
         </div>
-      ) : null}
+      )}
+
+      {roleDialog && (
+        <div
+          className="modal-overlay"
+          onClick={() => !savingRoleDefinition && setRoleDialog(null)}
+        >
+          <form
+            aria-labelledby="role-form-title"
+            aria-modal="true"
+            className="modal"
+            onClick={(event) => event.stopPropagation()}
+            onSubmit={(event) => {
+              event.preventDefault();
+              void saveRoleDefinition();
+            }}
+            role="dialog"
+          >
+            <div className="modal-header">
+              <h2 className="modal-title" id="role-form-title">
+                {roleDialog.role ? "Edit role" : "Create role"}
+              </h2>
+            </div>
+            <div className="modal-body">
+              <div className="form-group">
+                <label className="form-label" htmlFor="role-name">Role name</label>
+                <input
+                  autoFocus
+                  className="form-input"
+                  id="role-name"
+                  maxLength={60}
+                  minLength={2}
+                  onChange={(event) => setRoleNameDraft(event.target.value)}
+                  required
+                  value={roleNameDraft}
+                />
+              </div>
+              {roleDialog.role && (
+                <p style={{ margin: "8px 0 0", color: "#64748b", fontSize: "12px" }}>
+                  Renaming keeps existing user assignments and permissions.
+                </p>
+              )}
+              {errorMessage && (
+                <div className="erp-alert erp-alert--danger" role="alert" style={{ marginTop: "12px" }}>
+                  {errorMessage}
+                </div>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button
+                className="erp-btn erp-btn--secondary"
+                disabled={savingRoleDefinition}
+                onClick={() => setRoleDialog(null)}
+                type="button"
+              >
+                Cancel
+              </button>
+              <button
+                className="erp-btn erp-btn--primary"
+                disabled={savingRoleDefinition}
+                type="submit"
+              >
+                {savingRoleDefinition ? "Saving..." : "Save role"}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {roleToDelete && (
+        <div
+          className="modal-overlay"
+          onClick={() => !deletingRole && setRoleToDelete(null)}
+        >
+          <section
+            aria-describedby="delete-role-description"
+            aria-labelledby="delete-role-title"
+            aria-modal="true"
+            className="modal"
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+          >
+            <div className="modal-header">
+              <h2 className="modal-title" id="delete-role-title">Delete role?</h2>
+            </div>
+            <div className="modal-body">
+              <p id="delete-role-description">
+                Permanently delete the {roleToDelete.name} role? Roles assigned to users cannot be deleted.
+              </p>
+              {errorMessage && (
+                <div className="erp-alert erp-alert--danger" role="alert">
+                  {errorMessage}
+                </div>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button
+                className="erp-btn erp-btn--secondary"
+                disabled={deletingRole}
+                onClick={() => setRoleToDelete(null)}
+                type="button"
+              >
+                Cancel
+              </button>
+              <button
+                className="erp-btn erp-btn--secondary"
+                disabled={deletingRole}
+                onClick={() => void removeRole()}
+                type="button"
+              >
+                <TrashIcon size={16} />
+                {deletingRole ? "Deleting..." : "Delete role"}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   );
 }

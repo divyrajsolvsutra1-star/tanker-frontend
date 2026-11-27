@@ -9,12 +9,13 @@ import ErpToolbar from "@/components/common/ErpToolbar";
 import ErpDrawer from "@/components/common/ErpDrawer";
 import ErpStatusBadge from "@/components/common/ErpStatusBadge";
 import ErpSelect from "@/components/common/ErpSelect";
+import IconActionButton from "@/components/common/IconActionButton";
 import {
   RefreshIcon,
   PlusIcon,
   PrintIcon,
 } from "@/components/common/Icons";
-import { ApiError, apiRequest, getBusinessResource } from "@/lib/api";
+import { ApiError, apiRequest, deleteBusinessResource, getBusinessResource } from "@/lib/api";
 
 type Item = Record<string, unknown>;
 
@@ -24,10 +25,13 @@ export default function WashEntriesPage() {
   const [vehicles, setVehicles] = useState<Item[]>([]);
   const [washTypes, setWashTypes] = useState<Item[]>([]);
   const [employees, setEmployees] = useState<Item[]>([]);
-  const [activeTab, setActiveTab] = useState<"all" | "booked" | "washing" | "completed" | "delivered">("all");
+  const [activeTab, setActiveTab] = useState<"all" | "booked" | "washing" | "completed" | "delivered" | "cancelled">("all");
   const [search, setSearch] = useState("");
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const [form, setForm] = useState<Record<string, string | number | boolean>>({
     paymentType: "immediate",
@@ -82,6 +86,34 @@ export default function WashEntriesPage() {
     e.preventDefault();
     setError("");
     setSaved("");
+
+    const errors: Record<string, string> = {};
+    if (!form.customerId) {
+      errors.customerId = "Customer is required. Please select a customer.";
+    }
+    if (!form.vehicleId) {
+      errors.vehicleId = "Vehicle is required. Please select a tanker vehicle.";
+    }
+    if (!form.washTypeId) {
+      errors.washTypeId = "Wash service type is required. Please choose a service.";
+    }
+    if (form.savedRate === undefined || form.savedRate === null || form.savedRate === "" || Number(form.savedRate) < 0) {
+      errors.savedRate = "Wash charge rate is required (minimum ₹ 0).";
+    }
+    if (!form.paymentType) {
+      errors.paymentType = "Payment terms is required.";
+    }
+    if (form.paymentType === "immediate" && !form.paymentMethod) {
+      errors.paymentMethod = "Payment method is required for immediate counter payment.";
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      setError("Please fill in all required fields marked with * before registering wash entry.");
+      return;
+    }
+
+    setFieldErrors({});
     setIsSubmitting(true);
     try {
       const employeeIds = form.employeeId ? [String(form.employeeId)] : [];
@@ -92,6 +124,7 @@ export default function WashEntriesPage() {
       });
       setSaved(`Wash entry #${String(r.item.entryNumber)} registered successfully.`);
       setForm({ paymentType: "immediate", paymentMethod: "cash", status: "booked" });
+      setFieldErrors({});
       setIsDrawerOpen(false);
       await load();
     } catch (e) {
@@ -115,6 +148,23 @@ export default function WashEntriesPage() {
     }
   }
 
+  async function deleteEntry() {
+    if (!pendingDeleteId) return;
+    setIsDeleting(true);
+    setError("");
+    setSaved("");
+    try {
+      await deleteBusinessResource("wash-entries", pendingDeleteId);
+      setPendingDeleteId(null);
+      setSaved("Wash entry deleted. Linked accounting amounts, allocations, and audit records were removed; shared receipts were adjusted.");
+      await load();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Could not delete wash entry.");
+    } finally {
+      setIsDeleting(false);
+    }
+  }
+
   function printReceipt(r: Item, format: "thermal" | "a4" = "thermal") {
     const customer =
       typeof r.customerId === "object" && r.customerId
@@ -135,7 +185,7 @@ export default function WashEntriesPage() {
     const amount = Number(r.savedRate || 0).toLocaleString("en-IN");
 
     const thermalCss = `
-      body { font-family: 'Courier New', monospace; width: 72mm; margin: 0 auto; padding: 12px; font-size: 12px; line-height: 1.3; color: #000; }
+      body { font-family: 'Montserrat', sans-serif; width: 72mm; margin: 0 auto; padding: 12px; font-size: 12px; line-height: 1.3; color: #000; }
       .header { text-align: center; border-bottom: 1px dashed #000; padding-bottom: 8px; margin-bottom: 8px; }
       .header h2 { margin: 0 0 4px; font-size: 15px; text-transform: uppercase; }
       .header p { margin: 2px 0; font-size: 11px; }
@@ -147,7 +197,7 @@ export default function WashEntriesPage() {
     `;
 
     const a4Css = `
-      body { font-family: Arial, sans-serif; max-width: 750px; margin: 20px auto; padding: 32px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 13.5px; color: #1e293b; }
+      body { font-family: 'Montserrat', sans-serif; max-width: 750px; margin: 20px auto; padding: 32px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 13.5px; color: #1e293b; }
       .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #0f172a; padding-bottom: 16px; margin-bottom: 20px; }
       .header h1 { margin: 0; font-size: 22px; color: #0f172a; }
       .header p { margin: 4px 0; color: #64748b; font-size: 12.5px; }
@@ -165,7 +215,7 @@ export default function WashEntriesPage() {
     `;
 
     const html = format === "thermal" ? `
-      <!DOCTYPE html><html><head><meta charset="utf-8"><title>Slip #${String(r.entryNumber)}</title><style>${thermalCss}</style></head>
+      <!DOCTYPE html><html><head><meta charset="utf-8"><title>Slip #${String(r.entryNumber)}</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet"><style>${thermalCss}</style></head>
       <body>
         <div class="header">
           <h2>TANKER WASH SERVICES</h2>
@@ -191,7 +241,7 @@ export default function WashEntriesPage() {
         <script>window.onload=()=>window.print();<\/script>
       </body></html>
     ` : `
-      <!DOCTYPE html><html><head><meta charset="utf-8"><title>Receipt #${String(r.entryNumber)}</title><style>${a4Css}</style></head>
+      <!DOCTYPE html><html><head><meta charset="utf-8"><title>Receipt #${String(r.entryNumber)}</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet"><style>${a4Css}</style></head>
       <body>
         <div class="header">
           <div>
@@ -215,7 +265,7 @@ export default function WashEntriesPage() {
           <div class="box">
             <strong>Tanker & Driver Details</strong>
             <div style="font-size: 15px; font-weight: bold; color: #0f172a;">Vehicle: ${vehicle}</div>
-            <div style="color: #475569; font-size: 12.5px; margin-top: 4px;">Driver: ${String(r.driverName || "Standard")} | Mob: ${String(r.driverMobileNumber || "-")}</div>
+            <div style="color: #475569; font-size: 12.5px; margin-top: 4px;">Driver: ${String(r.driverName || "-")} | Mob: ${String(r.driverMobileNumber || "-")}</div>
           </div>
         </div>
 
@@ -267,7 +317,9 @@ export default function WashEntriesPage() {
     () =>
       customers.map((c) => ({
         value: String(c._id),
-        label: `${String(c.name)} (${String(c.customerType || "Account")})`,
+        label: c.customerType
+          ? `${String(c.name)} (${String(c.customerType)})`
+          : String(c.name),
       })),
     [customers]
   );
@@ -282,7 +334,9 @@ export default function WashEntriesPage() {
 
     return list.map((v) => ({
       value: String(v._id),
-      label: `${String(v.vehicleNumber)} - Driver: ${String(v.driverName || "Standard")}`,
+      label: v.driverName
+        ? `${String(v.vehicleNumber)} - Driver: ${String(v.driverName)}`
+        : String(v.vehicleNumber),
     }));
   }, [vehicles, form.customerId]);
 
@@ -299,7 +353,7 @@ export default function WashEntriesPage() {
     () =>
       employees.map((e) => ({
         value: String(e._id),
-        label: `${String(e.name)} (${String(e.designation || "Washer")})`,
+        label: String(e.name),
       })),
     [employees]
   );
@@ -334,6 +388,10 @@ export default function WashEntriesPage() {
   );
   const completedCount = useMemo(
     () => items.filter((r) => String(r.status).toLowerCase() === "completed").length,
+    [items]
+  );
+  const cancelledCount = useMemo(
+    () => items.filter((r) => String(r.status).toLowerCase() === "cancelled").length,
     [items]
   );
   const totalRevenue = useMemo(
@@ -390,7 +448,7 @@ export default function WashEntriesPage() {
         const isCredit = String(r.paymentType).toLowerCase() === "credit";
         return (
           <span className={`erp-pill ${isCredit ? "erp-pill--individual" : "erp-pill--company"}`}>
-            {isCredit ? "Credit / Ledger" : `Immediate (${String(r.paymentMethod || "Cash")})`}
+            {isCredit ? "Credit / Ledger" : `Immediate (${String(r.paymentMethod || "—")})`}
           </span>
         );
       },
@@ -440,6 +498,12 @@ export default function WashEntriesPage() {
                 Deliver
               </button>
             )}
+            <IconActionButton
+              action="delete"
+              title="Delete wash entry and linked records"
+              disabled={isDeleting}
+              onClick={() => setPendingDeleteId(id)}
+            />
             <button
               type="button"
               className="erp-action-btn"
@@ -500,6 +564,7 @@ export default function WashEntriesPage() {
           { id: "washing", label: "Washing Bay", count: activeWashCount },
           { id: "completed", label: "Ready", count: completedCount },
           { id: "delivered", label: "Delivered" },
+          { id: "cancelled", label: "Cancelled", count: cancelledCount },
         ]}
       />
 
@@ -538,6 +603,55 @@ export default function WashEntriesPage() {
         </div>
       </div>
 
+      {pendingDeleteId && (
+        <div className="modal-overlay" onClick={() => !isDeleting && setPendingDeleteId(null)}>
+          <section
+            aria-describedby="delete-wash-entry-description"
+            aria-labelledby="delete-wash-entry-title"
+            aria-modal="true"
+            className="modal"
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+          >
+            <div className="modal-header">
+              <h2 id="delete-wash-entry-title">Permanently delete wash entry?</h2>
+            </div>
+            <div className="modal-body">
+              <p>
+                <span id="delete-wash-entry-description">
+                  This permanently removes the wash entry and its linked accounting transactions,
+                  receipts, payment allocations, and audit history. If a receipt also covers other
+                  wash entries, only this entry&apos;s allocation and amount will be removed.
+                </span>
+              </p>
+              {error && (
+                <div className="erp-alert erp-alert--error" role="alert">
+                  {error}
+                </div>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button
+                className="btn btn-secondary"
+                type="button"
+                disabled={isDeleting}
+                onClick={() => setPendingDeleteId(null)}
+              >
+                Keep entry
+              </button>
+              <button
+                className="btn btn-danger"
+                type="button"
+                disabled={isDeleting}
+                onClick={() => void deleteEntry()}
+              >
+                {isDeleting ? "Deleting..." : "Delete permanently"}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+
       {/* New Wash Entry Slide-over Drawer with Custom Selects */}
       <ErpDrawer
         isOpen={isDrawerOpen}
@@ -547,26 +661,38 @@ export default function WashEntriesPage() {
       >
         <form className="erp-drawer-form" onSubmit={submit}>
           <div className="erp-form-grid">
-            <div className="erp-field-group">
-              <label>Select Customer*</label>
+            <div className={`erp-field-group ${fieldErrors.customerId ? "erp-field-group--error" : ""}`}>
+              <label>Select Customer <span className="erp-required-star">*</span></label>
               <ErpSelect
                 required
+                hasError={Boolean(fieldErrors.customerId)}
                 value={String(form.customerId || "")}
                 options={customerOptions}
                 placeholder="-- Choose Customer --"
                 onChange={(val) => {
                   setForm((prev) => ({ ...prev, customerId: val, vehicleId: "" }));
+                  if (fieldErrors.customerId) {
+                    setFieldErrors((prev) => {
+                      const next = { ...prev };
+                      delete next.customerId;
+                      return next;
+                    });
+                  }
                   if (form.washTypeId) {
                     updateRate(val, String(form.washTypeId));
                   }
                 }}
               />
+              {fieldErrors.customerId && (
+                <span className="erp-field-error-msg">{fieldErrors.customerId}</span>
+              )}
             </div>
 
-            <div className="erp-field-group">
-              <label>Select Vehicle*</label>
+            <div className={`erp-field-group ${fieldErrors.vehicleId ? "erp-field-group--error" : ""}`}>
+              <label>Select Vehicle <span className="erp-required-star">*</span></label>
               <ErpSelect
                 required
+                hasError={Boolean(fieldErrors.vehicleId)}
                 value={String(form.vehicleId || "")}
                 options={vehicleOptions}
                 placeholder="-- Choose Vehicle --"
@@ -580,37 +706,68 @@ export default function WashEntriesPage() {
                     driverName: prev.driverName || String(veh?.driverName || ""),
                     driverMobileNumber: prev.driverMobileNumber || String(veh?.driverMobileNumber || ""),
                   }));
+                  if (fieldErrors.vehicleId) {
+                    setFieldErrors((prev) => {
+                      const next = { ...prev };
+                      delete next.vehicleId;
+                      return next;
+                    });
+                  }
                 }}
               />
+              {fieldErrors.vehicleId && (
+                <span className="erp-field-error-msg">{fieldErrors.vehicleId}</span>
+              )}
             </div>
 
-            <div className="erp-field-group">
-              <label>Wash Type Service*</label>
+            <div className={`erp-field-group ${fieldErrors.washTypeId ? "erp-field-group--error" : ""}`}>
+              <label>Wash Type Service <span className="erp-required-star">*</span></label>
               <ErpSelect
                 required
+                hasError={Boolean(fieldErrors.washTypeId)}
                 value={String(form.washTypeId || "")}
                 options={washTypeOptions}
                 placeholder="-- Choose Wash Service --"
                 onChange={(val) => {
                   setForm((prev) => ({ ...prev, washTypeId: val }));
+                  if (fieldErrors.washTypeId) {
+                    setFieldErrors((prev) => {
+                      const next = { ...prev };
+                      delete next.washTypeId;
+                      return next;
+                    });
+                  }
                   updateRate(String(form.customerId || ""), val);
                 }}
               />
+              {fieldErrors.washTypeId && (
+                <span className="erp-field-error-msg">{fieldErrors.washTypeId}</span>
+              )}
             </div>
 
-            <div className="erp-field-group">
-              <label>Wash Charge Rate (₹)*</label>
+            <div className={`erp-field-group ${fieldErrors.savedRate ? "erp-field-group--error" : ""}`}>
+              <label>Wash Charge Rate (₹) <span className="erp-required-star">*</span></label>
               <input
                 type="number"
                 min="0"
                 required
-                className="erp-input"
+                className={`erp-input ${fieldErrors.savedRate ? "erp-input--error" : ""}`}
                 placeholder="Rate in ₹"
                 value={String(form.savedRate ?? "")}
-                onChange={(e) =>
-                  setForm({ ...form, savedRate: Number(e.target.value), rateModified: true })
-                }
+                onChange={(e) => {
+                  setForm({ ...form, savedRate: Number(e.target.value), rateModified: true });
+                  if (fieldErrors.savedRate) {
+                    setFieldErrors((prev) => {
+                      const next = { ...prev };
+                      delete next.savedRate;
+                      return next;
+                    });
+                  }
+                }}
               />
+              {fieldErrors.savedRate && (
+                <span className="erp-field-error-msg">{fieldErrors.savedRate}</span>
+              )}
             </div>
 
             <div className="erp-field-group">
@@ -623,23 +780,49 @@ export default function WashEntriesPage() {
               />
             </div>
 
-            <div className="erp-field-group">
-              <label>Payment Terms*</label>
+            <div className={`erp-field-group ${fieldErrors.paymentType ? "erp-field-group--error" : ""}`}>
+              <label>Payment Terms <span className="erp-required-star">*</span></label>
               <ErpSelect
                 value={String(form.paymentType)}
+                hasError={Boolean(fieldErrors.paymentType)}
                 options={paymentTypeOptions}
-                onChange={(val) => setForm({ ...form, paymentType: val })}
+                onChange={(val) => {
+                  setForm((prev) => ({ ...prev, paymentType: val }));
+                  if (fieldErrors.paymentType) {
+                    setFieldErrors((prev) => {
+                      const next = { ...prev };
+                      delete next.paymentType;
+                      return next;
+                    });
+                  }
+                }}
               />
+              {fieldErrors.paymentType && (
+                <span className="erp-field-error-msg">{fieldErrors.paymentType}</span>
+              )}
             </div>
 
             {form.paymentType === "immediate" ? (
-              <div className="erp-field-group">
-                <label>Counter Payment Method*</label>
+              <div className={`erp-field-group ${fieldErrors.paymentMethod ? "erp-field-group--error" : ""}`}>
+                <label>Counter Payment Method <span className="erp-required-star">*</span></label>
                 <ErpSelect
                   value={String(form.paymentMethod)}
+                  hasError={Boolean(fieldErrors.paymentMethod)}
                   options={paymentMethodOptions}
-                  onChange={(val) => setForm({ ...form, paymentMethod: val })}
+                  onChange={(val) => {
+                    setForm((prev) => ({ ...prev, paymentMethod: val }));
+                    if (fieldErrors.paymentMethod) {
+                      setFieldErrors((prev) => {
+                        const next = { ...prev };
+                        delete next.paymentMethod;
+                        return next;
+                      });
+                    }
+                  }}
                 />
+                {fieldErrors.paymentMethod && (
+                  <span className="erp-field-error-msg">{fieldErrors.paymentMethod}</span>
+                )}
               </div>
             ) : (
               <div

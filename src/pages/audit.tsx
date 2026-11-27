@@ -3,7 +3,6 @@ import ErpPageHeader from "@/components/common/ErpPageHeader";
 import ErpStatsGrid from "@/components/common/ErpStatsGrid";
 import ErpToolbar from "@/components/common/ErpToolbar";
 import DataTable from "@/components/common/DataTable";
-import ErpStatusBadge from "@/components/common/ErpStatusBadge";
 import { apiRequest } from "@/lib/api";
 
 export default function AuditPage() {
@@ -33,7 +32,10 @@ export default function AuditPage() {
   const stats = [
     { label: "TOTAL LOGS", value: items.length },
     { label: "ACTIONS AUDITED", value: filteredItems.length, color: "teal" as const },
-    { label: "SECURITY LEVEL", value: "Compliant", color: "active" as const },
+    {
+      label: "ACTION TYPES",
+      value: new Set(items.map((item) => String(item.action || "").trim()).filter(Boolean)).size,
+    },
   ];
 
   const columns = [
@@ -64,15 +66,10 @@ export default function AuditPage() {
         const u = r.userId as { displayName?: string } | undefined;
         return (
           <span style={{ fontWeight: 600, color: "#0f172a" }}>
-            {u?.displayName || "System / Admin"}
+            {u?.displayName || "—"}
           </span>
         );
       },
-    },
-    {
-      id: "status",
-      header: "INTEGRITY",
-      cell: () => <ErpStatusBadge status="active" label="Verified" />,
     },
   ];
 
@@ -99,7 +96,7 @@ export default function AuditPage() {
             caption="Audit History"
             columns={columns}
             emptyMessage={loading ? "Loading audit logs..." : "No activity logs recorded."}
-            getRowKey={(r) => String(r._id || Math.random())}
+            getRowKey={(r) => String(r._id)}
             rows={filteredItems}
           />
         </div>

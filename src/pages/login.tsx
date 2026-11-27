@@ -5,7 +5,6 @@ import type { FormEvent } from "react";
 import Button from "@/components/common/Button";
 import {
   AlertTriangleIcon,
-  KeyIcon,
   LockIcon,
   MailIcon,
   ReportsIcon,
@@ -16,37 +15,6 @@ import {
 import { ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 
-const TEST_CREDENTIALS = [
-  {
-    role: "Admin",
-    badge: "Full Control",
-    email: "admin@tanker.local",
-    pass: "Admin@123456",
-    color: "#0f766e",
-  },
-  {
-    role: "Manager",
-    badge: "Operations & Sales",
-    email: "manager@tanker.local",
-    pass: "Manager@123456",
-    color: "#2563eb",
-  },
-  {
-    role: "Operator",
-    badge: "Wash Entries",
-    email: "operator@tanker.local",
-    pass: "Operator@123456",
-    color: "#d97706",
-  },
-  {
-    role: "Accountant",
-    badge: "Ledger & Finance",
-    email: "accountant@tanker.local",
-    pass: "Accountant@123456",
-    color: "#7c3aed",
-  },
-];
-
 export default function LoginPage() {
   const router = useRouter();
   const { signIn } = useAuth();
@@ -55,7 +23,6 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [showDemoModal, setShowDemoModal] = useState(false);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -73,12 +40,6 @@ export default function LoginPage() {
     } finally {
       setIsSubmitting(false);
     }
-  }
-
-  function handleSelectCredential(credEmail: string, credPass: string) {
-    setEmail(credEmail);
-    setPassword(credPass);
-    setShowDemoModal(false);
   }
 
   return (
@@ -140,8 +101,7 @@ export default function LoginPage() {
         </div>
 
         <div className="login-showcase__foot">
-          <span className="login-live-dot" aria-hidden="true" />
-          <span>System Online &bull; 256-bit Encrypted Private Session</span>
+          <span>Secure workspace for your tanker wash operations.</span>
         </div>
       </section>
 
@@ -225,91 +185,11 @@ export default function LoginPage() {
             </Button>
           </form>
 
-          {/* Quick Demo Credentials Pill / Button */}
-          <div className="login-demo-trigger">
-            <button
-              type="button"
-              className="login-demo-pill"
-              onClick={() => setShowDemoModal(true)}
-            >
-              <span>
-                <KeyIcon size={15} />
-              </span>
-              <span>Need test credentials? <strong>Open Demo Accounts</strong></span>
-            </button>
-          </div>
-
           <p className="login-help">
             Need access? Contact your <strong>Owner / Administrator</strong> for invitation.
           </p>
         </div>
       </section>
-
-      {/* Modern Demo Accounts Modal Popup */}
-      {showDemoModal ? (
-        <div
-          className="demo-modal-backdrop"
-          onClick={() => setShowDemoModal(false)}
-          role="dialog"
-          aria-modal="true"
-        >
-          <div
-            className="demo-modal-card"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="demo-modal-header">
-              <div>
-                <h3>Demo Test Accounts</h3>
-                <p>Click any role to automatically fill credentials into the form.</p>
-              </div>
-              <button
-                type="button"
-                className="demo-modal-close"
-                onClick={() => setShowDemoModal(false)}
-                aria-label="Close modal"
-              >
-                &times;
-              </button>
-            </div>
-
-            <div className="demo-modal-grid">
-              {TEST_CREDENTIALS.map((item) => (
-                <button
-                  key={item.role}
-                  type="button"
-                  className="demo-card-item"
-                  onClick={() => handleSelectCredential(item.email, item.pass)}
-                >
-                  <div className="demo-card-top">
-                    <span
-                      className="demo-card-role"
-                      style={{ color: item.color }}
-                    >
-                      {item.role}
-                    </span>
-                    <span className="demo-card-badge">{item.badge}</span>
-                  </div>
-                  <div className="demo-card-code">{item.email}</div>
-                  <div className="demo-card-footer">
-                    <code>{item.pass}</code>
-                    <span className="demo-card-action">Select &rarr;</span>
-                  </div>
-                </button>
-              ))}
-            </div>
-
-            <div className="demo-modal-footer">
-              <button
-                type="button"
-                className="demo-modal-dismiss-btn"
-                onClick={() => setShowDemoModal(false)}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
     </main>
   );
 }

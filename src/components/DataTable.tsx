@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
-import { AlertTriangleIcon, EditIcon, FileTextIcon, TrashIcon } from "@/components/common/Icons";
+import { AlertTriangleIcon, FileTextIcon } from "@/components/common/Icons";
+import IconActionButton from "@/components/common/IconActionButton";
 
 export interface Column<Row extends object> {
   key: keyof Row & string;
@@ -106,7 +107,7 @@ export default function DataTable<T extends { _id?: string; id?: string }>({
                     {col.label}
                   </th>
                 ))}
-                {actions && <th style={{ width: "150px" }}>Actions</th>}
+                {actions && <th style={{ width: "90px" }}>Actions</th>}
               </tr>
             </thead>
             <tbody>
@@ -123,24 +124,18 @@ export default function DataTable<T extends { _id?: string; id?: string }>({
                     <td>
                       <div style={{ display: "flex", gap: "8px" }}>
                         {onEdit && (
-                          <button
-                            className="btn btn-secondary btn-sm"
+                          <IconActionButton
+                            action="edit"
                             onClick={() => onEdit(row)}
                             title="Edit"
-                            type="button"
-                          >
-                            <EditIcon size={14} />
-                          </button>
+                          />
                         )}
                         {onDelete && (
-                          <button
-                            className="btn btn-danger btn-sm"
+                          <IconActionButton
+                            action="delete"
                             onClick={() => setDeleteConfirm(row)}
                             title="Delete"
-                            type="button"
-                          >
-                            <TrashIcon size={14} />
-                          </button>
+                          />
                         )}
                       </div>
                     </td>

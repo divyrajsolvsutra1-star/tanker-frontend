@@ -97,8 +97,11 @@ export default function LedgerPage() {
     const lines = ledger.lines || [];
     const html = `
       <!DOCTYPE html><html><head><meta charset="utf-8"><title>Customer Ledger - ${String(cust.name)}</title>
+      <link rel="preconnect" href="https://fonts.googleapis.com" />
+      <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+      <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
       <style>
-        body { font-family: Arial, sans-serif; max-width: 800px; margin: 20px auto; padding: 24px; color: #1e293b; }
+        body { font-family: 'Montserrat', sans-serif; max-width: 800px; margin: 20px auto; padding: 24px; color: #1e293b; }
         .header { border-bottom: 2px solid #0f172a; padding-bottom: 12px; margin-bottom: 20px; display: flex; justify-content: space-between; }
         .header h1 { margin: 0; font-size: 20px; }
         .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; background: #f8fafc; padding: 14px; border: 1px solid #e2e8f0; border-radius: 6px; }
@@ -172,7 +175,9 @@ export default function LedgerPage() {
   const customerOptions = useMemo(() => {
     return customers.map((c) => ({
       value: String(c._id),
-      label: `${String(c.name)} (${String(c.customerType || "Customer")})`,
+      label: c.customerType
+        ? `${String(c.name)} (${String(c.customerType)})`
+        : String(c.name),
     }));
   }, [customers]);
 
@@ -215,7 +220,7 @@ export default function LedgerPage() {
       ]
     : [
         { label: "REGISTERED CUSTOMERS", value: customers.length, color: "teal" as const },
-        { label: "LEDGER STATUS", value: "Select Account", color: "default" as const },
+        { label: "BANK ACCOUNTS", value: bankAccounts.length, color: "default" as const },
       ];
 
   const statementCols = [
