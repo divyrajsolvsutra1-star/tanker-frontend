@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CheckIcon, ChevronDownIcon, SearchIcon } from "@/components/common/Icons";
+import { CheckIcon, ChevronDownIcon, SearchIcon, PlusIcon } from "@/components/common/Icons";
 
 export interface SelectOption {
   value: string;
@@ -16,6 +16,9 @@ interface ErpSelectProps {
   required?: boolean;
   className?: string;
   hasError?: boolean;
+  onAddNew?: (searchQuery?: string) => void;
+  addNewLabel?: string;
+  showQuickAddButton?: boolean;
 }
 
 export default function ErpSelect({
@@ -28,6 +31,9 @@ export default function ErpSelect({
   required = false,
   className = "",
   hasError = false,
+  onAddNew,
+  addNewLabel,
+  showQuickAddButton = true,
 }: ErpSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [filterQuery, setFilterQuery] = useState("");
@@ -36,6 +42,11 @@ export default function ErpSelect({
 
   // Find currently selected option
   const selectedOption = options.find((opt) => opt.value === value);
+
+  // Clean label without double '+'
+  const cleanLabel = useMemo(() => {
+    return (addNewLabel || "Add New").replace(/^[+\s]+/, "").trim();
+  }, [addNewLabel]);
 
   // Close on outside click
   useEffect(() => {
@@ -71,34 +82,36 @@ export default function ErpSelect({
   useEffect(() => {
     if (isOpen) {
       setFilterQuery("");
-      if (options.length > 5) {
+      if (options.length > 3 || onAddNew) {
         setTimeout(() => {
           searchInputRef.current?.focus();
         }, 50);
       }
-    }
-  }, [isOpen, options.length]);
+}
+  }, [isOpen, options.length, onAddNew]);
 
-  function handleSelect(optValue: string) {
-    onChange(optValue);
-    setIsOpen(false);
-  }
+function handleSelect(optValue: string) {
+  onChange(optValue);
+  setIsOpen(false);
+}
 
-  // Filtered options based on search query
-  const filteredOptions = useMemo(() => {
-    if (!filterQuery.trim()) return options;
-    const q = filterQuery.toLowerCase().trim();
-    return options.filter(
-      (opt) =>
-        opt.label.toLowerCase().includes(q) ||
-        opt.value.toLowerCase().includes(q),
-    );
-  }, [options, filterQuery]);
+// Filtered options based on search query
+const filteredOptions = useMemo(() => {
+  if (!filterQuery.trim()) return options;
+  const q = filterQuery.toLowerCase().trim();
+  return options.filter(
+    (opt) =>
+      opt.label.toLowerCase().includes(q) ||
+      opt.value.toLowerCase().includes(q),
+  );
+}, [options, filterQuery]);
 
-  return (
+const hasQuickButton = Boolean(onAddNew && showQuickAddButton);
+
+    return (
     <div
       ref={containerRef}
-      className={`erp-select-container ${disabled ? "erp-select-disabled" : ""} ${hasError ? "erp-select-container--error" : ""} ${className}`}
+      className={`erp-select-container ${hasQuickButton ? "erp-select-container--with-quick-add" : ""} ${disabled ? "erp-select-disabled" : ""} ${hasError ? "erp-select-container--error" : ""} ${className}`}
     >
       {/* Hidden input for form validation if required */}
       {required && (
@@ -108,40 +121,59 @@ export default function ErpSelect({
           style={{ opacity: 0, width: 0, height: 0, position: "absolute", pointerEvents: "none" }}
           value={value}
           required={required}
-          onChange={() => {}}
+          onChange={() => { }}
         />
       )}
 
-      {/* Select Trigger */}
-      <button
-        id={id}
-        type="button"
-        disabled={disabled}
-        className={`erp-select-trigger ${isOpen ? "erp-select-trigger--open" : ""} ${hasError ? "erp-select-trigger--error" : ""}`}
-        onClick={() => setIsOpen((prev) => !prev)}
-        aria-haspopup="listbox"
-        aria-expanded={isOpen}
-      >
-        <span className={`erp-select-value ${!selectedOption ? "erp-select-placeholder" : ""}`}>
-          {selectedOption ? selectedOption.label : placeholder}
-        </span>
-        <span className={`erp-select-chevron ${isOpen ? "erp-select-chevron--open" : ""}`}>
-          <ChevronDownIcon size={16} />
-        </span>
-      </button>
+          {/* Select Control Row (Trigger + Optional Quick Add Button) */ }
+          < div className="erp-select-control-row">
+        <button
+          id={id}
+          type="button"
+          disabled={disabled}
+          className={`erp-select-trigger ${isOpen ? "erp-select-trigger--open" : ""} ${hasError ? "erp-select-trigger--error" : ""}`}
+          onClick={() => setIsOpen((prev) => !prev)}
+          aria-haspopup="listbox"
+          aria-expanded={isOpen}
+        >
+          <span className={`erp-select-value ${!selectedOption ? "erp-select-placeholder" : ""}`}>
+            {selectedOption ? selectedOption.label : placeholder}
+          </span>
+          <span className={`erp-select-chevron ${isOpen ? "erp-select-chevron--open" : ""}`}>
+            <ChevronDownIcon size={16} />
+          </span>
+        </button>
+
+        {hasQuickButton && (
+          <button
+            type="button"
+            className="erp-select-quick-btn"
+            title={cleanLabel}
+            aria-label={cleanLabel}
+            disabled={disabled}
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsOpen(false);
+              onAddNew?.("");
+            }}
+          >
+            <PlusIcon size={14} />
+          </button>
+        )}
+      </div>
 
       {/* Dropdown Popover */}
       {isOpen && (
         <div className="erp-select-dropdown" role="listbox">
-          {/* Search bar inside dropdown when options > 5 */}
-          {options.length > 5 && (
+          {/* Search bar inside dropdown when options > 3 or onAddNew */}
+          {(options.length > 3 || onAddNew) && (
             <div className="erp-select-search-box">
               <SearchIcon size={14} className="erp-select-search-icon" />
               <input
                 ref={searchInputRef}
                 type="text"
                 className="erp-select-search-input"
-                placeholder="Search options..."
+                placeholder="Search or filter options..."
                 value={filterQuery}
                 onChange={(e) => setFilterQuery(e.target.value)}
                 onClick={(e) => e.stopPropagation()}
@@ -162,21 +194,27 @@ export default function ErpSelect({
           )}
 
           <div className="erp-select-options-list">
-            {placeholder && !filterQuery && (
-              <div
-                className={`erp-select-option erp-select-option--placeholder ${!value ? "selected" : ""}`}
-                onClick={() => handleSelect("")}
-                role="option"
-                aria-selected={!value}
-              >
-                <span>{placeholder}</span>
-                {!value && <CheckIcon size={14} className="erp-select-check" />}
-              </div>
-            )}
-
             {filteredOptions.length === 0 ? (
               <div className="erp-select-no-options">
-                No matching options found
+                <div className="erp-select-no-options-text">
+                  No matching options{filterQuery ? ` for "${filterQuery}"` : ""}.
+                </div>
+                {onAddNew && (
+                  <button
+                    type="button"
+                    className="erp-select-inline-add-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsOpen(false);
+                      onAddNew(filterQuery);
+                    }}
+                  >
+                    <PlusIcon size={13} />
+                    <span>
+                      {filterQuery ? `Add "${filterQuery}" as New` : cleanLabel}
+                    </span>
+                  </button>
+                )}
               </div>
             ) : (
               filteredOptions.map((opt) => {
@@ -196,8 +234,28 @@ export default function ErpSelect({
               })
             )}
           </div>
+
+          {/* Quick Add Footer when options exist */}
+          {onAddNew && filteredOptions.length > 0 && (
+            <div className="erp-select-add-footer">
+              <button
+                type="button"
+                className="erp-select-footer-add-btn"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsOpen(false);
+                  onAddNew(filterQuery);
+                }}
+              >
+                <PlusIcon size={13} />
+                <span>
+                  {filterQuery ? `Add "${filterQuery}" as New` : cleanLabel}
+                </span>
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>
-  );
+      );
 }

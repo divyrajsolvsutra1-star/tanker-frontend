@@ -1,7 +1,7 @@
 import { useRouter } from "next/router";
 import { useAuth } from "@/lib/auth-context";
 import Link from "next/link";
-import { ReactNode, useMemo } from "react";
+import { ReactNode, useEffect, useMemo, useState } from "react";
 import {
   TruckIcon,
   DashboardIcon,
@@ -23,7 +23,17 @@ import {
   AuditIcon,
   SettingsIcon,
   BellIcon,
+  PlusIcon,
 } from "@/components/common/Icons";
+import {
+  QuickCustomerModal,
+  QuickVehicleModal,
+  QuickWashTypeModal,
+  QuickBankAccountModal,
+  QuickEmployeeModal,
+  QuickExpenseCategoryModal,
+  QuickMasterPaletteModal,
+} from "@/components/quick-masters";
 
 interface LayoutProps {
   children: ReactNode;
@@ -55,6 +65,7 @@ const menuItems = [
       { icon: <LedgerIcon size={17} />, label: "Ledger", href: "/ledger" },
       { icon: <BankAccountsIcon size={17} />, label: "Bank Accounts", href: "/bank-accounts" },
       { icon: <ExpensesIcon size={17} />, label: "Expenses", href: "/expenses" },
+      { icon: <ExpensesIcon size={17} />, label: "Expense Categories", href: "/expense-categories" },
       { icon: <EmployeesIcon size={17} />, label: "Employees", href: "/employees" },
       { icon: <SalaryIcon size={17} />, label: "Salary", href: "/salary" },
     ],
@@ -80,6 +91,51 @@ const menuItems = [
 export default function Layout({ children, title, description }: LayoutProps) {
   const router = useRouter();
   const { user, signOut } = useAuth();
+
+  // Global Quick Master States
+  const [showPalette, setShowPalette] = useState(false);
+  const [showCustomerModal, setShowCustomerModal] = useState(false);
+  const [showVehicleModal, setShowVehicleModal] = useState(false);
+  const [showWashTypeModal, setShowWashTypeModal] = useState(false);
+  const [showBankModal, setShowBankModal] = useState(false);
+  const [showEmployeeModal, setShowEmployeeModal] = useState(false);
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
+
+  // Global Keyboard Shortcuts
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      // Ignore if user is inside input, textarea, or select
+      const target = e.target as HTMLElement | null;
+      const isInput =
+        target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT");
+
+      if (e.altKey && !e.ctrlKey && !e.metaKey) {
+        const key = e.key.toLowerCase();
+        if (key === "m") {
+          e.preventDefault();
+          setShowPalette((prev) => !prev);
+        } else if (key === "c") {
+          e.preventDefault();
+          setShowCustomerModal(true);
+        } else if (key === "v") {
+          e.preventDefault();
+          setShowVehicleModal(true);
+        } else if (key === "t") {
+          e.preventDefault();
+          setShowWashTypeModal(true);
+        } else if (key === "w") {
+          e.preventDefault();
+          void router.push("/wash-entries?action=new");
+        } else if (key === "e") {
+          e.preventDefault();
+          void router.push("/expenses?action=new");
+        }
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [router]);
 
   const isPublicRoute = router.pathname === "/login" || router.pathname === "/activate";
 
@@ -163,6 +219,18 @@ export default function Layout({ children, title, description }: LayoutProps) {
           </div>
 
           <div className="topbar-actions">
+            {/* Quick Master & Action Button */}
+            <button
+              type="button"
+              className="topbar-quick-master-btn"
+              title="Quick Masters & Fast Actions (Alt + M)"
+              onClick={() => setShowPalette(true)}
+            >
+              <PlusIcon size={14} />
+              <span>Quick Master</span>
+              <kbd className="topbar-shortcut-badge">Alt+M</kbd>
+            </button>
+
             <button
               type="button"
               className="topbar-icon-btn"
@@ -203,6 +271,79 @@ export default function Layout({ children, title, description }: LayoutProps) {
           {children}
         </div>
       </div>
+
+      {/* Global Quick Action Palette Modal */}
+      <QuickMasterPaletteModal
+        isOpen={showPalette}
+        onClose={() => setShowPalette(false)}
+        onOpenCustomer={() => setShowCustomerModal(true)}
+        onOpenVehicle={() => setShowVehicleModal(true)}
+        onOpenWashType={() => setShowWashTypeModal(true)}
+        onOpenBankAccount={() => setShowBankModal(true)}
+        onOpenEmployee={() => setShowEmployeeModal(true)}
+        onOpenExpenseCategory={() => setShowCategoryModal(true)}
+      />
+
+      {/* Global Quick Master Modals */}
+      <QuickCustomerModal
+        isOpen={showCustomerModal}
+        onClose={() => setShowCustomerModal(false)}
+        onSuccess={() => {
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(new CustomEvent("erp:master-created", { detail: { type: "customer" } }));
+          }
+        }}
+      />
+
+      <QuickVehicleModal
+        isOpen={showVehicleModal}
+        onClose={() => setShowVehicleModal(false)}
+        onSuccess={() => {
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(new CustomEvent("erp:master-created", { detail: { type: "vehicle" } }));
+          }
+        }}
+      />
+
+      <QuickWashTypeModal
+        isOpen={showWashTypeModal}
+        onClose={() => setShowWashTypeModal(false)}
+        onSuccess={() => {
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(new CustomEvent("erp:master-created", { detail: { type: "wash-type" } }));
+          }
+        }}
+      />
+
+      <QuickBankAccountModal
+        isOpen={showBankModal}
+        onClose={() => setShowBankModal(false)}
+        onSuccess={() => {
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(new CustomEvent("erp:master-created", { detail: { type: "bank-account" } }));
+          }
+        }}
+      />
+
+      <QuickEmployeeModal
+        isOpen={showEmployeeModal}
+        onClose={() => setShowEmployeeModal(false)}
+        onSuccess={() => {
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(new CustomEvent("erp:master-created", { detail: { type: "employee" } }));
+          }
+        }}
+      />
+
+      <QuickExpenseCategoryModal
+        isOpen={showCategoryModal}
+        onClose={() => setShowCategoryModal(false)}
+        onSuccess={() => {
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(new CustomEvent("erp:master-created", { detail: { type: "expense-category" } }));
+          }
+        }}
+      />
     </main>
   );
 }

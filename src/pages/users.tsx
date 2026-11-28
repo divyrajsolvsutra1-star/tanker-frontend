@@ -10,8 +10,13 @@ import DataTable from "@/components/common/DataTable";
 import IconActionButton from "@/components/common/IconActionButton";
 import {
   CheckCircleIcon,
+  EyeIcon,
+  EyeOffIcon,
+  KeyIcon,
+  LockIcon,
   PlusIcon,
   RefreshIcon,
+  XIcon,
 } from "@/components/common/Icons";
 import {
   activateUserAccount,
@@ -20,6 +25,8 @@ import {
   getRolePermissions,
   getUsers,
   inviteUser,
+  resetUserPassword,
+  updateUser,
   updateUserRole,
 } from "@/lib/api";
 import type { RolePermissionSet, UserRecord, UserRole } from "@/lib/api";
@@ -46,6 +53,18 @@ export default function UsersPage() {
   const [roleUser, setRoleUser] = useState<UserRecord | null>(null);
   const [selectedRole, setSelectedRole] = useState<UserRole>("");
   const [isUpdatingRole, setIsUpdatingRole] = useState(false);
+  const [editUser, setEditUser] = useState<UserRecord | null>(null);
+  const [editDisplayName, setEditDisplayName] = useState("");
+  const [editRole, setEditRole] = useState<UserRole>("");
+  const [editPassword, setEditPassword] = useState("");
+  const [editShowPassword, setEditShowPassword] = useState(false);
+  const [editError, setEditError] = useState("");
+  const [isSavingUser, setIsSavingUser] = useState(false);
+  const [passwordUser, setPasswordUser] = useState<UserRecord | null>(null);
+  const [resetPasswordVal, setResetPasswordVal] = useState("");
+  const [resetShowPassword, setResetShowPassword] = useState(false);
+  const [resetPasswordError, setResetPasswordError] = useState("");
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
   const [activationUser, setActivationUser] = useState<UserRecord | null>(null);
   const [temporaryPassword, setTemporaryPassword] = useState("");
   const [activationError, setActivationError] = useState("");
@@ -162,6 +181,71 @@ export default function UsersPage() {
     }
   }
 
+  async function handleSaveEditUser() {
+    if (!editUser) return;
+    if (!editDisplayName.trim()) {
+      setEditError("Full name is required.");
+      return;
+    }
+    if (editPassword && editPassword.trim().length < 6) {
+      setEditError("New password must be at least 6 characters.");
+      return;
+    }
+
+    setIsSavingUser(true);
+    setEditError("");
+    setErrorMessage("");
+    setSuccessMessage("");
+    try {
+      const result = await updateUser(editUser.id, {
+        displayName: editDisplayName.trim(),
+        role: editRole,
+        password: editPassword.trim() || undefined,
+      });
+      setUsers((current) =>
+        current.map((item) => (item.id === editUser.id ? result.user : item)),
+      );
+      setSuccessMessage(
+        `${editDisplayName.trim()} was updated successfully${editPassword ? " with a new password" : ""}.`,
+      );
+      setEditUser(null);
+    } catch (error) {
+      setEditError(
+        error instanceof ApiError ? error.message : "Could not update staff member.",
+      );
+    } finally {
+      setIsSavingUser(false);
+    }
+  }
+
+  async function handleDirectResetPassword() {
+    if (!passwordUser) return;
+    if (!resetPasswordVal || resetPasswordVal.trim().length < 6) {
+      setResetPasswordError("Password must be at least 6 characters.");
+      return;
+    }
+
+    setIsResettingPassword(true);
+    setResetPasswordError("");
+    setErrorMessage("");
+    setSuccessMessage("");
+    try {
+      const result = await resetUserPassword(passwordUser.id, resetPasswordVal.trim());
+      setUsers((current) =>
+        current.map((item) => (item.id === passwordUser.id ? result.user : item)),
+      );
+      setSuccessMessage(`Password for ${passwordUser.displayName} was reset successfully.`);
+      setPasswordUser(null);
+      setResetPasswordVal("");
+    } catch (error) {
+      setResetPasswordError(
+        error instanceof ApiError ? error.message : "Could not reset password.",
+      );
+    } finally {
+      setIsResettingPassword(false);
+    }
+  }
+
   async function handleActivateUser() {
     if (!activationUser) return;
     setIsActivating(true);
@@ -265,12 +349,26 @@ export default function UsersPage() {
           <div style={{ display: "flex", gap: "6px", justifyContent: "flex-end", flexWrap: "wrap" }}>
             <IconActionButton
               action="edit"
-              title="Change user role"
-              disabled={isUpdatingRole}
+              title="Edit Staff Member & Role"
+              disabled={isSavingUser}
               onClick={() => {
-                setErrorMessage("");
-                setSelectedRole(u.role);
-                setRoleUser(u);
+                setEditError("");
+                setEditUser(u);
+                setEditDisplayName(u.displayName);
+                setEditRole(u.role);
+                setEditPassword("");
+                setEditShowPassword(false);
+              }}
+            />
+            <IconActionButton
+              action="password"
+              title="Reset / Change Password"
+              disabled={isResettingPassword}
+              onClick={() => {
+                setResetPasswordError("");
+                setPasswordUser(u);
+                setResetPasswordVal("");
+                setResetShowPassword(false);
               }}
             />
             {canActivate && (
@@ -537,173 +635,369 @@ export default function UsersPage() {
         </form>
       </ErpDrawer>
 
-      {roleUser && (
+      {/* Edit Staff Account Modal (Role, Name & Optional Password) */}
+      {editUser && (
         <div
           className="modal-overlay"
-          onClick={() => !isUpdatingRole && setRoleUser(null)}
-        >
-          <section
-            aria-labelledby="change-user-role-title"
-            aria-modal="true"
-            className="modal"
-            onClick={(event) => event.stopPropagation()}
-            role="dialog"
-          >
-            <div className="modal-header">
-              <h2 className="modal-title" id="change-user-role-title">
-                Change role for {roleUser.displayName}
-              </h2>
-            </div>
-            <div className="modal-body">
-              <label className="form-group">
-                <span className="form-label">Role</span>
-                <ErpSelect
-                  value={selectedRole}
-                  options={roleOptions}
-                  onChange={setSelectedRole}
-                  placeholder="Select role..."
-                />
-              </label>
-              {errorMessage && (
-                <div className="erp-alert erp-alert--danger" role="alert">
-                  {errorMessage}
-                </div>
-              )}
-            </div>
-            <div className="modal-footer">
-              <button
-                className="erp-btn erp-btn--secondary"
-                disabled={isUpdatingRole}
-                onClick={() => setRoleUser(null)}
-                type="button"
-              >
-                Cancel
-              </button>
-              <button
-                className="erp-btn erp-btn--primary"
-                disabled={isUpdatingRole || selectedRole === roleUser.role}
-                onClick={() => void handleChangeRole()}
-                type="button"
-              >
-                {isUpdatingRole ? "Saving..." : "Save role"}
-              </button>
-            </div>
-          </section>
-        </div>
-      )}
-
-      {activationUser && (
-        <div
-          className="modal-overlay"
-          onClick={() => !isActivating && setActivationUser(null)}
-        >
-          <section
-            aria-labelledby="activate-user-title"
-            aria-modal="true"
-            className="modal"
-            onClick={(event) => event.stopPropagation()}
-            role="dialog"
-          >
-            <div className="modal-header">
-              <h2 className="modal-title" id="activate-user-title">
-                Activate {activationUser.displayName}
-              </h2>
-            </div>
-            <div className="modal-body">
-              <label className="form-group">
-                <span className="form-label">Temporary password</span>
-                <input
-                  autoComplete="new-password"
-                  className="form-input"
-                  maxLength={128}
-                  minLength={12}
-                  onChange={(event) => setTemporaryPassword(event.target.value)}
-                  required
-                  type="password"
-                  value={temporaryPassword}
-                />
-              </label>
-              <p style={{ margin: "8px 0 0", color: "#64748b", fontSize: "12px" }}>
-                Share it securely. The user must change it at first sign-in.
-              </p>
-              {activationError && (
-                <div className="erp-alert erp-alert--danger" role="alert" style={{ marginTop: "12px" }}>
-                  {activationError}
-                </div>
-              )}
-            </div>
-            <div className="modal-footer">
-              <button
-                className="erp-btn erp-btn--secondary"
-                disabled={isActivating}
-                onClick={() => setActivationUser(null)}
-                type="button"
-              >
-                Cancel
-              </button>
-              <button
-                className="erp-btn erp-btn--primary"
-                disabled={isActivating || temporaryPassword.length < 12}
-                onClick={() => void handleActivateUser()}
-                type="button"
-              >
-                {isActivating ? "Activating..." : "Activate account"}
-              </button>
-            </div>
-          </section>
-        </div>
-      )}
-
-      {pendingDeleteUser && (
-        <div
-          className="modal-overlay"
-          onClick={() => !isDeleting && setPendingDeleteUser(null)}
+          onClick={() => !isSavingUser && setEditUser(null)}
+          style={{ zIndex: 9999 }}
         >
           <div
-            aria-describedby="delete-user-description"
-            aria-labelledby="delete-user-title"
-            aria-modal="true"
             className="modal"
-            onClick={(event) => event.stopPropagation()}
+            style={{ maxWidth: "480px", width: "95%" }}
+            onClick={(e) => e.stopPropagation()}
             role="dialog"
+            aria-modal="true"
           >
             <div className="modal-header">
-              <h2 className="modal-title" id="delete-user-title">
-                Delete user account?
-              </h2>
+              <div>
+                <h2 className="modal-title" style={{ fontSize: "15px", fontWeight: 700, color: "#0f172a" }}>
+                  Edit Staff Account
+                </h2>
+                <p style={{ margin: "2px 0 0", fontSize: "12px", color: "#64748b" }}>
+                  Update details, authorization role, or set a new password.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="quick-master-close-btn"
+                onClick={() => setEditUser(null)}
+                aria-label="Close"
+              >
+                <XIcon size={16} />
+              </button>
             </div>
-            <div className="modal-body">
-              <p id="delete-user-description">
-                Permanently delete {pendingDeleteUser.displayName} ({pendingDeleteUser.email})?
-                Their active sessions will be revoked.
-              </p>
-              {deleteErrorMessage && (
+
+            <div className="modal-body" style={{ display: "flex", flexDirection: "column", gap: "14px", padding: "18px 20px" }}>
+              {editError && (
                 <div className="erp-alert erp-alert--danger" role="alert">
-                  {deleteErrorMessage}
+                  {editError}
                 </div>
               )}
+
+              <div className="erp-field-group">
+                <label>
+                  Staff Full Name <span className="erp-required-star">*</span>
+                </label>
+                <input
+                  type="text"
+                  className="erp-input"
+                  value={editDisplayName}
+                  onChange={(e) => setEditDisplayName(e.target.value)}
+                  placeholder="e.g. Ramesh Patel"
+                  required
+                />
+              </div>
+
+              <div className="erp-field-group">
+                <label>Email Address (Account Identifier)</label>
+                <input
+                  type="email"
+                  className="erp-input"
+                  value={editUser.email}
+                  disabled
+                  style={{ background: "#f8fafc", color: "#64748b", cursor: "not-allowed" }}
+                />
+              </div>
+
+              <div className="erp-field-group">
+                <label>
+                  Assigned Authorization Role <span className="erp-required-star">*</span>
+                </label>
+                <ErpSelect
+                  value={editRole}
+                  options={roleOptions}
+                  onChange={setEditRole}
+                  placeholder="Select role..."
+                />
+              </div>
+
+              <div className="erp-field-group">
+                <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span>Set New Password (Optional)</span>
+                  <span style={{ fontSize: "11px", color: "#64748b", fontWeight: 400 }}>Leave blank to keep current</span>
+                </label>
+                <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+                  <input
+                    type={editShowPassword ? "text" : "password"}
+                    className="erp-input"
+                    value={editPassword}
+                    onChange={(e) => setEditPassword(e.target.value)}
+                    placeholder="Enter new password (min 6 chars)..."
+                    style={{ paddingRight: "40px" }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setEditShowPassword((p) => !p)}
+                    style={{
+                      position: "absolute",
+                      right: "8px",
+                      background: "none",
+                      border: "none",
+                      color: "#64748b",
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      padding: "4px",
+                    }}
+                    title={editShowPassword ? "Hide password" : "Show password"}
+                  >
+                    {editShowPassword ? <EyeOffIcon size={16} /> : <EyeIcon size={16} />}
+                  </button>
+                </div>
+              </div>
             </div>
+
             <div className="modal-footer">
               <button
-                className="btn btn-secondary"
-                disabled={isDeleting}
-                onClick={() => setPendingDeleteUser(null)}
                 type="button"
+                className="erp-btn erp-btn--secondary"
+                disabled={isSavingUser}
+                onClick={() => setEditUser(null)}
               >
                 Cancel
               </button>
               <button
-                className="btn btn-danger"
-                disabled={isDeleting}
-                onClick={() => void handleDeleteUser()}
                 type="button"
+                className="erp-btn erp-btn--primary"
+                disabled={isSavingUser}
+                onClick={() => void handleSaveEditUser()}
               >
-                {isDeleting ? "Deleting..." : "Delete permanently"}
+                {isSavingUser ? "Saving Changes..." : "Save Changes"}
               </button>
             </div>
           </div>
         </div>
       )}
-    </div>
-  );
+
+      {/* Direct Reset Password Modal */}
+      {passwordUser && (
+        <div
+          className="modal-overlay"
+          onClick={() => !isResettingPassword && setPasswordUser(null)}
+          style={{ zIndex: 9999 }}
+        >
+          <div
+            className="modal"
+            style={{ maxWidth: "440px", width: "95%" }}
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+          >
+            <div className="modal-header">
+              <div>
+                <h2 className="modal-title" style={{ fontSize: "15px", fontWeight: 700, color: "#0f172a", display: "flex", alignItems: "center", gap: "8px" }}>
+                  <LockIcon size={16} color="#0f766e" />
+                  Reset Staff Password
+                </h2>
+                <p style={{ margin: "2px 0 0", fontSize: "12px", color: "#64748b" }}>
+                  Set a direct sign-in password for <strong>{passwordUser.displayName}</strong> ({passwordUser.email}).
+                </p>
+              </div>
+              <button
+                type="button"
+                className="quick-master-close-btn"
+                onClick={() => setPasswordUser(null)}
+                aria-label="Close"
+              >
+                <XIcon size={16} />
+              </button>
+            </div>
+
+                  <form
+                    noValidate
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      void handleDirectResetPassword();
+                    }}
+                  >
+                    <div className="modal-body" style={{ display: "flex", flexDirection: "column", gap: "14px", padding: "18px 20px" }}>
+                      <div className={`erp-field-group ${resetPasswordError ? "erp-field-group--error" : ""}`}>
+                        <label>
+                          New Login Password <span className="erp-required-star">*</span>
+                        </label>
+                        <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+                          <input
+                            type={resetShowPassword ? "text" : "password"}
+                            className={`erp-input ${resetPasswordError ? "erp-input--error" : ""}`}
+                            value={resetPasswordVal}
+                            onChange={(e) => {
+                              setResetPasswordVal(e.target.value);
+                              if (resetPasswordError) setResetPasswordError("");
+                            }}
+                            placeholder="Enter new password (min 6 chars)..."
+                            autoFocus
+                            style={{ paddingRight: "40px" }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setResetShowPassword((p) => !p)}
+                            style={{
+                              position: "absolute",
+                              right: "8px",
+                              background: "none",
+                              border: "none",
+                              color: "#64748b",
+                              cursor: "pointer",
+                              display: "flex",
+                              alignItems: "center",
+                              padding: "4px",
+                            }}
+                            title={resetShowPassword ? "Hide password" : "Show password"}
+                          >
+                            {resetShowPassword ? <EyeOffIcon size={16} /> : <EyeIcon size={16} />}
+                          </button>
+                        </div>
+                        {resetPasswordError ? (
+                          <span className="erp-field-error-msg">{resetPasswordError}</span>
+                        ) : (
+                          <p style={{ margin: "4px 0 0", fontSize: "11.5px", color: "#64748b" }}>
+                            Must be at least 6 characters. The user can log in immediately with this password.
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                      <div className="modal-footer">
+                        <button
+                          type="button"
+                          className="erp-btn erp-btn--secondary"
+                          disabled={isResettingPassword}
+                          onClick={() => setPasswordUser(null)}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="submit"
+                          className="erp-btn erp-btn--primary"
+                          disabled={isResettingPassword}
+                          style={{ background: "#0f766e", color: "#fff" }}
+                        >
+                          {isResettingPassword ? "Updating Password..." : "Update Password"}
+                        </button>
+                      </div>
+                  </form>
+                </div>
+        </div>
+            )
+}
+
+            {
+              activationUser && (
+                <div
+                  className="modal-overlay"
+                  onClick={() => !isActivating && setActivationUser(null)}
+                >
+                  <section
+                    aria-labelledby="activate-user-title"
+                    aria-modal="true"
+                    className="modal"
+                    onClick={(event) => event.stopPropagation()}
+                    role="dialog"
+                  >
+                    <div className="modal-header">
+                      <h2 className="modal-title" id="activate-user-title">
+                        Activate {activationUser.displayName}
+                      </h2>
+                    </div>
+                    <div className="modal-body">
+                      <label className="form-group">
+                        <span className="form-label">Temporary password</span>
+                        <input
+                          autoComplete="new-password"
+                          className="form-input"
+                          maxLength={128}
+                          minLength={12}
+                          onChange={(event) => setTemporaryPassword(event.target.value)}
+                          required
+                          type="password"
+                          value={temporaryPassword}
+                        />
+                      </label>
+                      <p style={{ margin: "8px 0 0", color: "#64748b", fontSize: "12px" }}>
+                        Share it securely. The user must change it at first sign-in.
+                      </p>
+                      {activationError && (
+                        <div className="erp-alert erp-alert--danger" role="alert" style={{ marginTop: "12px" }}>
+                          {activationError}
+                        </div>
+                      )}
+                    </div>
+                    <div className="modal-footer">
+                      <button
+                        className="erp-btn erp-btn--secondary"
+                        disabled={isActivating}
+                        onClick={() => setActivationUser(null)}
+                        type="button"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        className="erp-btn erp-btn--primary"
+                        disabled={isActivating || temporaryPassword.length < 12}
+                        onClick={() => void handleActivateUser()}
+                        type="button"
+                      >
+                        {isActivating ? "Activating..." : "Activate account"}
+                      </button>
+                    </div>
+                  </section>
+                </div>
+              )
+            }
+
+            {
+              pendingDeleteUser && (
+                <div
+                  className="modal-overlay"
+                  onClick={() => !isDeleting && setPendingDeleteUser(null)}
+                >
+                  <div
+                    aria-describedby="delete-user-description"
+                    aria-labelledby="delete-user-title"
+                    aria-modal="true"
+                    className="modal"
+                    onClick={(event) => event.stopPropagation()}
+                    role="dialog"
+                  >
+                    <div className="modal-header">
+                      <h2 className="modal-title" id="delete-user-title">
+                        Delete user account?
+                      </h2>
+                    </div>
+                    <div className="modal-body">
+                      <p id="delete-user-description">
+                        Permanently delete {pendingDeleteUser.displayName} ({pendingDeleteUser.email})?
+                        Their active sessions will be revoked.
+                      </p>
+                      {deleteErrorMessage && (
+                        <div className="erp-alert erp-alert--danger" role="alert">
+                          {deleteErrorMessage}
+                        </div>
+                      )}
+                    </div>
+                    <div className="modal-footer">
+                      <button
+                        className="btn btn-secondary"
+                        disabled={isDeleting}
+                        onClick={() => setPendingDeleteUser(null)}
+                        type="button"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        className="btn btn-danger"
+                        disabled={isDeleting}
+                        onClick={() => void handleDeleteUser()}
+                        type="button"
+                      >
+                        {isDeleting ? "Deleting..." : "Delete permanently"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )
+            }
+          </div >
+          );
 }

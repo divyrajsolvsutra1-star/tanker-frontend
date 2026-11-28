@@ -35,6 +35,14 @@ export type CrudField = {
   pattern?: string;
   inputMode?: "text" | "numeric" | "tel" | "email";
   validationMessage?: string;
+  validate?: (
+    value: string | number | undefined,
+    formValues: Record<string, string | number>,
+    items: Record<string, unknown>[],
+    editingId: string | null
+  ) => string | null | undefined;
+  onAddNew?: (searchQuery?: string) => void;
+  addNewLabel?: string;
 };
 
 type Props = {
@@ -43,9 +51,20 @@ type Props = {
   path: string;
   fields: CrudField[];
   permission?: boolean;
+  registerSetValue?: (setter: (fieldName: string, value: string | number) => void) => void;
+  registerOpenCreate?: (opener: () => void) => void;
+  externalValues?: Record<string, string | number>;
 };
 
-export default function CrudModule({ title, description, path, fields }: Props) {
+export default function CrudModule({
+  title,
+  description,
+  path,
+  fields,
+  registerSetValue,
+  registerOpenCreate,
+  externalValues,
+}: Props) {
   const [items, setItems] = useState<Record<string, unknown>[]>([]);
   const [form, setForm] = useState<Record<string, string | number>>({});
   const [editing, setEditing] = useState<string | null>(null);
@@ -58,6 +77,20 @@ export default function CrudModule({ title, description, path, fields }: Props) 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+
+  const setFieldValue = useCallback((fieldName: string, value: string | number) => {
+    setForm((prev) => ({ ...prev, [fieldName]: value }));
+  }, []);
+
+  useEffect(() => {
+    registerSetValue?.(setFieldValue);
+  }, [registerSetValue, setFieldValue]);
+
+  useEffect(() => {
+    if (externalValues && Object.keys(externalValues).length > 0) {
+      setForm((prev) => ({ ...prev, ...externalValues }));
+    }
+  }, [externalValues]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -142,14 +175,43 @@ export default function CrudModule({ title, description, path, fields }: Props) 
     return list;
   }, [filteredItems.length, activeCount, inactiveCount, totalValue]);
 
-  function handleOpenCreate() {
+  const handleOpenCreate = useCallback(() => {
     setEditing(null);
     setForm({});
     setError("");
     setSaved("");
     setFieldErrors({});
     setIsDrawerOpen(true);
-  }
+  }, []);
+
+  useEffect(() => {
+    registerOpenCreate?.(handleOpenCreate);
+  }, [registerOpenCreate, handleOpenCreate]);
+
+  // Global & drawer keyboard shortcuts
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      const target = e.target as HTMLElement | null;
+      const isInput =
+        target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT");
+
+      // Alt + N: Open new record drawer (when not actively typing inside input)
+      if (e.altKey && (e.key === "n" || e.key === "N")) {
+        e.preventDefault();
+        handleOpenCreate();
+      }
+
+      // Ctrl + Enter or Cmd + Enter: Submit open drawer form
+      if (isDrawerOpen && (e.ctrlKey || e.metaKey) && e.key === "Enter") {
+        e.preventDefault();
+        const formEl = document.querySelector(".erp-drawer-form") as HTMLFormElement | null;
+        formEl?.requestSubmit();
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isDrawerOpen, handleOpenCreate]);
 
   const handleOpenEdit = useCallback((id: string, row: Record<string, unknown>) => {
     setEditing(id);
@@ -190,12 +252,19 @@ export default function CrudModule({ title, description, path, fields }: Props) 
       }
       if (!isEmpty && f.pattern && !new RegExp(`^(?:${f.pattern})$`).test(String(val))) {
         errors[f.name] = f.validationMessage || `Enter a valid ${f.label.toLowerCase()}.`;
+        return;
+      }
+      if (f.validate) {
+        const customErr = f.validate(val, form, items, editing);
+        if (customErr) {
+          errors[f.name] = customErr;
+        }
       }
     });
 
     if (Object.keys(errors).length > 0) {
       setFieldErrors(errors);
-      setError("Please fill in all required fields marked with * before saving.");
+      setError("Please correct the errors in the form before saving.");
       return;
     }
 
@@ -213,7 +282,16 @@ export default function CrudModule({ title, description, path, fields }: Props) 
       handleCloseDrawer();
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not save record.");
+      if (err instanceof ApiError) {
+        if (err.field) {
+          setFieldErrors((prev) => ({ ...prev, [err.field!]: err.message }));
+        } else if (err.message.toLowerCase().includes("plate") || err.message.toLowerCase().includes("vehicle")) {
+          setFieldErrors((prev) => ({ ...prev, vehicleNumber: err.message }));
+        }
+        setError(err.message);
+      } else {
+        setError("Could not save record.");
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -392,114 +470,115 @@ export default function CrudModule({ title, description, path, fields }: Props) 
         title={editing ? `Edit ${title}` : `Add New ${title.replace(/s\b|&.*/g, "").trim()}`}
         subtitle="Fill out the details below to save the record in the system."
       >
-        <form className="erp-drawer-form" onSubmit={submit}>
-          <div className="erp-form-grid">
-            {fields.map((field) => {
-              const hasErr = Boolean(fieldErrors[field.name]);
-              return (
-                <div
-                  key={field.name}
-                  className={`erp-field-group ${hasErr ? "erp-field-group--error" : ""} ${
-                    field.name === "address" || field.name === "notes" ? "erp-field-group--full" : ""
-                  }`}
-                >
-                  <label htmlFor={`erp-input-${field.name}`}>
-                    {field.label}
-                    {field.required && <span className="erp-required-star">*</span>}
-                  </label>
+          <form className="erp-drawer-form" onSubmit={submit} noValidate>
+            <div className="erp-form-grid">
+              {fields.map((field) => {
+                const hasErr = Boolean(fieldErrors[field.name]);
+                return (
+                  <div
+                    key={field.name}
+                    className={`erp-field-group ${hasErr ? "erp-field-group--error" : ""} ${field.name === "address" || field.name === "notes" ? "erp-field-group--full" : ""
+                      }`}
+                  >
+                    <label htmlFor={`erp-input-${field.name}`}>
+                      {field.label}
+                      {field.required && <span className="erp-required-star">*</span>}
+                    </label>
 
-                  {/* Custom ErpSelect Component */}
-                  {field.options ? (
-                    <ErpSelect
-                      id={`erp-input-${field.name}`}
-                      required={field.required}
-                      hasError={hasErr}
-                      value={String(form[field.name] ?? "")}
-                      options={field.options}
-                      placeholder={`Select ${field.label}...`}
-                      onChange={(val) => {
-                        setForm({ ...form, [field.name]: val });
-                        if (fieldErrors[field.name]) {
-                          setFieldErrors((prev) => {
-                            const next = { ...prev };
-                            delete next[field.name];
-                            return next;
-                          });
-                        }
-                      }}
-                    />
-                  ) : field.type === "date" || field.type === "month" ? (
-                    /* Custom ErpDatePicker Component */
-                    <ErpDatePicker
-                      id={`erp-input-${field.name}`}
-                      required={field.required}
-                      hasError={hasErr}
-                      type={field.type}
-                      value={String(form[field.name] ?? "")}
-                      onChange={(val) => {
-                        setForm({ ...form, [field.name]: val });
-                        if (fieldErrors[field.name]) {
-                          setFieldErrors((prev) => {
-                            const next = { ...prev };
-                            delete next[field.name];
-                            return next;
-                          });
-                        }
-                      }}
-                    />
-                  ) : (
-                    <input
-                      id={`erp-input-${field.name}`}
-                      required={field.required}
-                      min={field.min}
-                      maxLength={field.maxLength}
-                      pattern={field.pattern}
-                      inputMode={field.inputMode}
-                      type={field.type || "text"}
-                      placeholder={`Enter ${field.label.toLowerCase()}...`}
-                      value={String(form[field.name] ?? "")}
-                      onChange={(e) => {
-                        const raw = e.target.value;
-                        const next =
-                          field.inputMode === "numeric" ? raw.replace(/\D/g, "").slice(0, field.maxLength) : raw;
-                        setForm({
-                          ...form,
-                          [field.name]: field.type === "number" ? Number(next) : next,
-                        });
-                        if (fieldErrors[field.name]) {
-                          setFieldErrors((prev) => {
-                            const next = { ...prev };
-                            delete next[field.name];
-                            return next;
-                          });
-                        }
-                      }}
-                      className={`erp-input ${hasErr ? "erp-input--error" : ""}`}
-                    />
-                  )}
+                    {/* Custom ErpSelect Component */}
+                    {field.options ? (
+                      <ErpSelect
+                        id={`erp-input-${field.name}`}
+                        required={field.required}
+                        hasError={hasErr}
+                        value={String(form[field.name] ?? "")}
+                        options={field.options}
+                        placeholder={`Select ${field.label}...`}
+                        onAddNew={field.onAddNew}
+                        addNewLabel={field.addNewLabel}
+                        onChange={(val) => {
+                          setForm((prev) => ({ ...prev, [field.name]: val }));
+                          if (fieldErrors[field.name]) {
+                            setFieldErrors((prev) => {
+                              const next = { ...prev };
+                              delete next[field.name];
+                              return next;
+                            });
+                          }
+                        }}
+                      />
+                    ) : field.type === "date" || field.type === "month" ? (
+                      /* Custom ErpDatePicker Component */
+                      <ErpDatePicker
+                        id={`erp-input-${field.name}`}
+                        required={field.required}
+                        hasError={hasErr}
+                        type={field.type}
+                        value={String(form[field.name] ?? "")}
+                        onChange={(val) => {
+                          setForm((prev) => ({ ...prev, [field.name]: val }));
+                          if (fieldErrors[field.name]) {
+                            setFieldErrors((prev) => {
+                              const next = { ...prev };
+                              delete next[field.name];
+                              return next;
+                            });
+                          }
+                        }}
+                      />
+                    ) : (
+                      <input
+                        id={`erp-input-${field.name}`}
+                        required={field.required}
+                        min={field.min}
+                        maxLength={field.maxLength}
+                        pattern={field.pattern}
+                        inputMode={field.inputMode}
+                        type={field.type || "text"}
+                        placeholder={`Enter ${field.label.toLowerCase()}...`}
+                        value={String(form[field.name] ?? "")}
+                        onChange={(e) => {
+                          const raw = e.target.value;
+                          const next =
+                            field.inputMode === "numeric" ? raw.replace(/\D/g, "").slice(0, field.maxLength) : raw;
+                          setForm((prev) => ({
+                            ...prev,
+                            [field.name]: field.type === "number" ? Number(next) : next,
+                          }));
+                          if (fieldErrors[field.name]) {
+                            setFieldErrors((prev) => {
+                              const next = { ...prev };
+                              delete next[field.name];
+                              return next;
+                            });
+                          }
+                        }}
+                        className={`erp-input ${hasErr ? "erp-input--error" : ""}`}
+                      />
+                    )}
 
-                  {hasErr && (
-                    <span className="erp-field-error-msg">{fieldErrors[field.name]}</span>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+                    {hasErr && (
+                      <span className="erp-field-error-msg">{fieldErrors[field.name]}</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
 
-          <div className="erp-drawer-footer">
-            <button
-              type="button"
-              className="erp-btn erp-btn--secondary"
-              onClick={handleCloseDrawer}
-              disabled={isSubmitting}
-            >
-              Cancel
-            </button>
-            <Button type="submit" disabled={isSubmitting} className="erp-btn erp-btn--primary">
-              {isSubmitting ? "Saving..." : editing ? "Update Record" : "Save Record"}
-            </Button>
-          </div>
-        </form>
+            <div className="erp-drawer-footer">
+              <button
+                type="button"
+                className="erp-btn erp-btn--secondary"
+                onClick={handleCloseDrawer}
+                disabled={isSubmitting}
+              >
+                Cancel
+              </button>
+              <Button type="submit" disabled={isSubmitting} className="erp-btn erp-btn--primary">
+                {isSubmitting ? "Saving..." : editing ? "Update Record" : "Save Record"}
+              </Button>
+            </div>
+          </form>
       </ErpDrawer>
 
       {pendingDeleteId ? (

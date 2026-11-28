@@ -1,7 +1,7 @@
-import { EditIcon, TrashIcon } from "@/components/common/Icons";
+import { EditIcon, TrashIcon, KeyIcon } from "@/components/common/Icons";
 
 interface IconActionButtonProps {
-  action: "edit" | "delete";
+  action: "edit" | "delete" | "password";
   onClick: () => void;
   title: string;
   disabled?: boolean;
@@ -13,7 +13,7 @@ export default function IconActionButton({
   title,
   disabled = false,
 }: IconActionButtonProps) {
-  const Icon = action === "edit" ? EditIcon : TrashIcon;
+  const Icon = action === "edit" ? EditIcon : action === "delete" ? TrashIcon : KeyIcon;
 
   return (
     <button

@@ -7,6 +7,7 @@ import ErpSelect from "@/components/common/ErpSelect";
 import DataTable from "@/components/common/DataTable";
 import { PrintIcon } from "@/components/common/Icons";
 import { ApiError, apiRequest, getBusinessResource } from "@/lib/api";
+import { QuickCustomerModal, QuickBankAccountModal } from "@/components/quick-masters";
 
 type Ledger = {
   customer?: Record<string, unknown>;
@@ -33,17 +34,37 @@ export default function LedgerPage() {
   const [saved, setSaved] = useState("");
   const [loading, setLoading] = useState(false);
 
+  // Quick Master States
+  const [showCustomerModal, setShowCustomerModal] = useState(false);
+  const [customerSearch, setCustomerSearch] = useState("");
+  const [showBankModal, setShowBankModal] = useState(false);
+  const [bankSearch, setBankSearch] = useState("");
+
+  function handleCustomerCreated(created: Record<string, unknown>) {
+    const newId = String(created._id || (created as { id?: string }).id || "");
+    if (!newId) return;
+    setCustomers((prev) => [created, ...prev.filter((c) => String(c._id || (c as { id?: string }).id) !== newId)]);
+    setCustomerId(newId);
+  }
+
+  function handleBankCreated(created: Record<string, unknown>) {
+    const newId = String(created._id || (created as { id?: string }).id || "");
+    if (!newId) return;
+    setBankAccounts((prev) => [created, ...prev.filter((b) => String(b._id || (b as { id?: string }).id) !== newId)]);
+    setPayment((prev) => ({ ...prev, bankAccountId: newId }));
+  }
+
   useEffect(() => {
     getBusinessResource<Record<string, unknown>>("customers", { limit: 100 })
       .then((res) => {
         setCustomers("items" in res ? res.items : []);
       })
-      .catch(() => {});
+      .catch(() => { });
     getBusinessResource<Record<string, unknown>>("bank-accounts", { limit: 100 })
       .then((res) => {
         setBankAccounts("items" in res ? res.items : []);
       })
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   async function load() {
@@ -202,26 +223,26 @@ export default function LedgerPage() {
 
   const stats = ledger
     ? [
-        {
-          label: "OUTSTANDING BALANCE",
-          value: `₹ ${Number(ledger.outstanding || 0).toLocaleString("en-IN")}`,
-          color: isOverLimit ? ("inactive" as const) : ("active" as const),
-        },
-        {
-          label: "CREDIT LIMIT",
-          value: `₹ ${Number(ledger.creditLimit || 0).toLocaleString("en-IN")}`,
-          color: "teal" as const,
-        },
-        {
-          label: "ADVANCE BALANCE",
-          value: `₹ ${Number(ledger.advance || 0).toLocaleString("en-IN")}`,
-          color: "active" as const,
-        },
-      ]
+      {
+        label: "OUTSTANDING BALANCE",
+        value: `₹ ${Number(ledger.outstanding || 0).toLocaleString("en-IN")}`,
+        color: isOverLimit ? ("inactive" as const) : ("active" as const),
+      },
+      {
+        label: "CREDIT LIMIT",
+        value: `₹ ${Number(ledger.creditLimit || 0).toLocaleString("en-IN")}`,
+        color: "teal" as const,
+      },
+      {
+        label: "ADVANCE BALANCE",
+        value: `₹ ${Number(ledger.advance || 0).toLocaleString("en-IN")}`,
+        color: "active" as const,
+      },
+    ]
     : [
-        { label: "REGISTERED CUSTOMERS", value: customers.length, color: "teal" as const },
-        { label: "BANK ACCOUNTS", value: bankAccounts.length, color: "default" as const },
-      ];
+      { label: "REGISTERED CUSTOMERS", value: customers.length, color: "teal" as const },
+      { label: "BANK ACCOUNTS", value: bankAccounts.length, color: "default" as const },
+    ];
 
   const statementCols = [
     {
@@ -292,193 +313,217 @@ export default function LedgerPage() {
       <ErpStatsGrid stats={stats} />
 
       {isOverLimit && (
-        <div className="erp-alert erp-alert--error" role="alert">
-          <strong>⚠️ Credit Limit Alert:</strong> This customer has exceeded their configured credit limit of ₹{Number(ledger?.creditLimit).toLocaleString("en-IN")}. Current outstanding is ₹{Number(ledger?.outstanding).toLocaleString("en-IN")}. New credit washes will require manager authorization.
-        </div>
+          <div className="erp-alert erp-alert--error" role="alert" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <strong>Credit Limit Alert:</strong> This customer has exceeded their configured credit limit of ₹{Number(ledger?.creditLimit).toLocaleString("en-IN")}. Current outstanding is ₹{Number(ledger?.outstanding).toLocaleString("en-IN")}. New credit washes will require manager authorization.
+          </div>
       )}
 
-      {error ? (
-        <div className="erp-alert erp-alert--error" role="alert">
-          {error}
-        </div>
-      ) : null}
-      {saved ? (
-        <div className="erp-alert erp-alert--success" role="status">
-          {saved}
-        </div>
-      ) : null}
+          {error ? (
+            <div className="erp-alert erp-alert--error" role="alert">
+              {error}
+            </div>
+          ) : null}
+          {saved ? (
+            <div className="erp-alert erp-alert--success" role="status">
+              {saved}
+            </div>
+          ) : null}
 
-      {/* Select Customer Box */}
-      <div className="erp-card" style={{ padding: "20px" }}>
-        <h3 style={{ fontSize: "16px", fontWeight: 700, margin: "0 0 12px", color: "#0f172a" }}>
-          Select Customer Account
-        </h3>
-        <div style={{ display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
-          <div style={{ width: "380px" }}>
-            <ErpSelect
-              value={customerId}
-              options={customerOptions}
-              placeholder="-- Choose Customer Account --"
-              onChange={(val) => {
-                setCustomerId(val);
-                setLedger(null);
-              }}
-            />
-          </div>
-
-          <button
-            type="button"
-            className="erp-btn erp-btn--primary"
-            onClick={() => void load()}
-            disabled={!customerId || loading}
-          >
-            {loading ? "Loading..." : "Load Customer Ledger"}
-          </button>
-        </div>
-      </div>
-
-      {/* Payment Collection & Outstanding Washes Allocation Form */}
-      {ledger ? (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))", gap: "20px" }}>
-          {/* Payment Collection Form */}
-          <div className="erp-card" style={{ padding: "24px" }}>
-            <h3 style={{ fontSize: "17px", fontWeight: 700, margin: "0 0 16px", color: "#0f172a" }}>
-              Record Payment Collection
+          {/* Select Customer Box */}
+          <div className="erp-card" style={{ padding: "20px" }}>
+            <h3 style={{ fontSize: "16px", fontWeight: 700, margin: "0 0 12px", color: "#0f172a" }}>
+              Select Customer Account
             </h3>
-            <form onSubmit={receive} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-              <div className="erp-field-group">
-                <label>Received Amount (₹)*</label>
-                <input
-                  type="number"
-                  min="1"
-                  required
-                  className="erp-input"
-                  placeholder="Enter payment amount"
-                  value={payment.amount}
-                  onChange={(e) => setPayment({ ...payment, amount: e.target.value })}
-                />
-              </div>
-
-              <div className="erp-field-group">
-                <label>Payment Mode*</label>
+            <div style={{ display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
+              <div style={{ width: "380px" }}>
                 <ErpSelect
-                  value={payment.paymentMethod}
-                  options={paymentMethodOptions}
-                  onChange={(val) => setPayment({ ...payment, paymentMethod: val })}
+                  value={customerId}
+                  options={customerOptions}
+                  placeholder="-- Choose Customer Account --"
+                  onAddNew={(query) => {
+                    setCustomerSearch(query || "");
+                    setShowCustomerModal(true);
+                  }}
+                  addNewLabel="Add New Customer"
+                  onChange={(val) => {
+                    setCustomerId(val);
+                    setLedger(null);
+                  }}
                 />
               </div>
 
-              {payment.paymentMethod === "bank" && (
-                <div className="erp-field-group">
-                  <label>Receiving Bank Account*</label>
-                  <ErpSelect
-                    required
-                    value={payment.bankAccountId}
-                    options={bankOptions}
-                    placeholder="-- Select Bank Account --"
-                    onChange={(val) => setPayment({ ...payment, bankAccountId: val })}
-                  />
-                </div>
-              )}
-
-              <Button type="submit" className="erp-btn erp-btn--primary" style={{ marginTop: "8px" }}>
-                Save Payment & Post Journal
-              </Button>
-            </form>
+              <button
+                type="button"
+                className="erp-btn erp-btn--primary"
+                onClick={() => void load()}
+                disabled={!customerId || loading}
+              >
+                {loading ? "Loading..." : "Load Customer Ledger"}
+              </button>
+            </div>
           </div>
 
-          {/* Pending Washes for Allocation */}
-          <div className="erp-card" style={{ padding: "24px" }}>
-            <h3 style={{ fontSize: "17px", fontWeight: 700, margin: "0 0 8px", color: "#0f172a" }}>
-              Allocate to Outstanding Washes
-            </h3>
-            <p style={{ color: "#64748b", fontSize: "13px", margin: "0 0 16px" }}>
-              Allocate against specific washes or leave blank to record as advance balance.
-            </p>
+          {/* Payment Collection & Outstanding Washes Allocation Form */}
+          {ledger ? (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))", gap: "20px" }}>
+              {/* Payment Collection Form */}
+              <div className="erp-card" style={{ padding: "24px" }}>
+                <h3 style={{ fontSize: "17px", fontWeight: 700, margin: "0 0 16px", color: "#0f172a" }}>
+                  Record Payment Collection
+                </h3>
+                <form onSubmit={receive} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                  <div className="erp-field-group">
+                    <label>Received Amount (₹)*</label>
+                    <input
+                      type="number"
+                      min="1"
+                      required
+                      className="erp-input"
+                      placeholder="Enter payment amount"
+                      value={payment.amount}
+                      onChange={(e) => setPayment({ ...payment, amount: e.target.value })}
+                    />
+                  </div>
 
-            {(!ledger.pendingEntries || ledger.pendingEntries.length === 0) ? (
-              <p style={{ color: "#059669", fontSize: "13px", fontWeight: 600 }}>
-                ✓ No unpaid credit wash entries for this customer.
-              </p>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: "12px", maxHeight: "260px", overflowY: "auto" }}>
-                {ledger.pendingEntries.map((pe) => {
-                  const currentAlloc = allocationsMap[pe._id] || 0;
-                  return (
-                    <div
-                      key={pe._id}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        padding: "10px 14px",
-                        background: "#f8fafc",
-                        border: "1px solid #e2e8f0",
-                        borderRadius: "6px",
-                      }}
-                    >
-                      <div>
-                        <strong>#{pe.entryNumber}</strong>
-                        <div style={{ color: "#64748b", fontSize: "12px" }}>
-                          Total: ₹{pe.savedRate} | Due: <span style={{ color: "#b91c1c" }}>₹{pe.outstanding}</span>
-                        </div>
-                      </div>
-                      <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                        <input
-                          type="number"
-                          min="0"
-                          max={pe.outstanding}
-                          className="erp-input"
-                          style={{ width: "90px", padding: "4px 8px" }}
-                          placeholder="₹ Amt"
-                          value={currentAlloc || ""}
-                          onChange={(e) => {
-                            const val = Number(e.target.value);
-                            setAllocationsMap((prev) => ({ ...prev, [pe._id]: val }));
-                          }}
-                        />
-                        <button
-                          type="button"
-                          className="erp-btn erp-btn--secondary"
-                          style={{ padding: "4px 8px", fontSize: "11px" }}
-                          onClick={() => {
-                            setAllocationsMap((prev) => ({ ...prev, [pe._id]: pe.outstanding }));
-                            setPayment((prev) => ({
-                              ...prev,
-                              amount: String(Math.max(Number(prev.amount || 0), pe.outstanding)),
-                            }));
+                  <div className="erp-field-group">
+                    <label>Payment Mode*</label>
+                    <ErpSelect
+                      value={payment.paymentMethod}
+                      options={paymentMethodOptions}
+                      onChange={(val) => setPayment({ ...payment, paymentMethod: val })}
+                    />
+                  </div>
+
+                  {payment.paymentMethod === "bank" && (
+                    <div className="erp-field-group">
+                      <label>Receiving Bank Account*</label>
+                      <ErpSelect
+                        required
+                        value={payment.bankAccountId}
+                        options={bankOptions}
+                        placeholder="-- Select Bank Account --"
+                        onAddNew={(query) => {
+                          setBankSearch(query || "");
+                          setShowBankModal(true);
+                        }}
+                        addNewLabel="Add Bank Account"
+                        onChange={(val) => setPayment({ ...payment, bankAccountId: val })}
+                      />
+                    </div>
+                  )}
+
+                  <Button type="submit" className="erp-btn erp-btn--primary" style={{ marginTop: "8px" }}>
+                    Save Payment & Post Journal
+                  </Button>
+                </form>
+              </div>
+
+              {/* Pending Washes for Allocation */}
+              <div className="erp-card" style={{ padding: "24px" }}>
+                <h3 style={{ fontSize: "17px", fontWeight: 700, margin: "0 0 8px", color: "#0f172a" }}>
+                  Allocate to Outstanding Washes
+                </h3>
+                <p style={{ color: "#64748b", fontSize: "13px", margin: "0 0 16px" }}>
+                  Allocate against specific washes or leave blank to record as advance balance.
+                </p>
+
+                {(!ledger.pendingEntries || ledger.pendingEntries.length === 0) ? (
+                  <p style={{ color: "#059669", fontSize: "13px", fontWeight: 600 }}>
+                    No unpaid credit wash entries for this customer.
+                  </p>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "12px", maxHeight: "260px", overflowY: "auto" }}>
+                    {ledger.pendingEntries.map((pe) => {
+                      const currentAlloc = allocationsMap[pe._id] || 0;
+                      return (
+                        <div
+                          key={pe._id}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            padding: "10px 14px",
+                            background: "#f8fafc",
+                            border: "1px solid #e2e8f0",
+                            borderRadius: "6px",
                           }}
                         >
-                          Full
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
+                          <div>
+                            <strong>#{pe.entryNumber}</strong>
+                            <div style={{ color: "#64748b", fontSize: "12px" }}>
+                              Total: ₹{pe.savedRate} | Due: <span style={{ color: "#b91c1c" }}>₹{pe.outstanding}</span>
+                            </div>
+                          </div>
+                          <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                            <input
+                              type="number"
+                              min="0"
+                              max={pe.outstanding}
+                              className="erp-input"
+                              style={{ width: "90px", padding: "4px 8px" }}
+                              placeholder="₹ Amt"
+                              value={currentAlloc || ""}
+                              onChange={(e) => {
+                                const val = Number(e.target.value);
+                                setAllocationsMap((prev) => ({ ...prev, [pe._id]: val }));
+                              }}
+                            />
+                            <button
+                              type="button"
+                              className="erp-btn erp-btn--secondary"
+                              style={{ padding: "4px 8px", fontSize: "11px" }}
+                              onClick={() => {
+                                setAllocationsMap((prev) => ({ ...prev, [pe._id]: pe.outstanding }));
+                                setPayment((prev) => ({
+                                  ...prev,
+                                  amount: String(Math.max(Number(prev.amount || 0), pe.outstanding)),
+                                }));
+                              }}
+                            >
+                              Full
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-        </div>
-      ) : null}
+            </div>
+          ) : null}
 
-      {/* Customer Ledger Statement Table */}
-      {ledger && ledger.lines && ledger.lines.length > 0 && (
-        <div className="erp-card" style={{ marginTop: "20px" }}>
-          <div className="erp-table-toolbar">
-            <span className="erp-toolbar-title">
-              Customer Ledger Statement - <strong>{String(ledger.customer?.name || "")}</strong>
-            </span>
-          </div>
-          <div className="erp-table-container">
-            <DataTable
-              caption="Ledger Statement"
-              columns={statementCols}
-              rows={ledger.lines}
-              getRowKey={(r) => `${r.date}-${r.reference}-${r.type}`}
-            />
-          </div>
+          {/* Customer Ledger Statement Table */}
+          {ledger && ledger.lines && ledger.lines.length > 0 && (
+            <div className="erp-card" style={{ marginTop: "20px" }}>
+              <div className="erp-table-toolbar">
+                <span className="erp-toolbar-title">
+                  Customer Ledger Statement - <strong>{String(ledger.customer?.name || "")}</strong>
+                </span>
+              </div>
+              <div className="erp-table-container">
+                <DataTable
+                  caption="Ledger Statement"
+                  columns={statementCols}
+                  rows={ledger.lines}
+                  getRowKey={(r) => `${r.date}-${r.reference}-${r.type}`}
+                />
+              </div>
+            </div>
+          )}
+
+          <QuickCustomerModal
+            isOpen={showCustomerModal}
+            onClose={() => setShowCustomerModal(false)}
+            onSuccess={handleCustomerCreated}
+            initialName={customerSearch}
+          />
+
+          <QuickBankAccountModal
+            isOpen={showBankModal}
+            onClose={() => setShowBankModal(false)}
+            onSuccess={handleBankCreated}
+            initialName={bankSearch}
+          />
         </div>
-      )}
-    </div>
-  );
+      );
 }

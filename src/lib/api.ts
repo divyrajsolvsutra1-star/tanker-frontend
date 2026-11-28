@@ -40,12 +40,14 @@ export interface RolePermissionsResponse {
 
 export interface ApiErrorResponse {
   error?: string;
+  field?: string;
 }
 
 export class ApiError extends Error {
   constructor(
     message: string,
     readonly status: number,
+    readonly field?: string,
   ) {
     super(message);
     this.name = "ApiError";
@@ -69,6 +71,7 @@ export async function apiRequest<T>(
     throw new ApiError(
       body?.error ?? `API request failed (${response.status} ${response.statusText})`,
       response.status,
+      body?.field,
     );
   }
 
@@ -144,6 +147,28 @@ export function updateUserRole(id: string, role: UserRole) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ role }),
   });
+}
+
+export function updateUser(
+  id: string,
+  input: { displayName?: string; role?: UserRole; password?: string },
+) {
+  return apiRequest<{ user: UserRecord; message?: string }>(`users/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+}
+
+export function resetUserPassword(id: string, password: string) {
+  return apiRequest<{ user: UserRecord; message?: string }>(
+    `users/${encodeURIComponent(id)}/password`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password }),
+    },
+  );
 }
 
 export function activateUserAccount(id: string, password: string) {

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
+import { useRouter } from "next/router";
 import Button from "@/components/common/Button";
 import DataTable from "@/components/common/DataTable";
 import ErpPageHeader from "@/components/common/ErpPageHeader";
@@ -16,6 +17,12 @@ import {
   PrintIcon,
 } from "@/components/common/Icons";
 import { ApiError, apiRequest, deleteBusinessResource, getBusinessResource } from "@/lib/api";
+import {
+  QuickCustomerModal,
+  QuickVehicleModal,
+  QuickWashTypeModal,
+  QuickEmployeeModal,
+} from "@/components/quick-masters";
 
 type Item = Record<string, unknown>;
 
@@ -33,6 +40,17 @@ export default function WashEntriesPage() {
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // Quick Master Modals State
+  const router = useRouter();
+  const [showCustomerModal, setShowCustomerModal] = useState(false);
+  const [customerSearch, setCustomerSearch] = useState("");
+  const [showVehicleModal, setShowVehicleModal] = useState(false);
+  const [vehicleSearch, setVehicleSearch] = useState("");
+  const [showWashTypeModal, setShowWashTypeModal] = useState(false);
+  const [washTypeSearch, setWashTypeSearch] = useState("");
+  const [showEmployeeModal, setShowEmployeeModal] = useState(false);
+  const [employeeSearch, setEmployeeSearch] = useState("");
+
   const [form, setForm] = useState<Record<string, string | number | boolean>>({
     paymentType: "immediate",
     paymentMethod: "cash",
@@ -41,6 +59,29 @@ export default function WashEntriesPage() {
   const [error, setError] = useState("");
   const [saved, setSaved] = useState("");
   const [loading, setLoading] = useState(true);
+
+  // Keyboard shortcut listener for Wash Entries page
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.altKey && (e.key === "n" || e.key === "N")) {
+        e.preventDefault();
+        setIsDrawerOpen(true);
+      }
+      if (isDrawerOpen && (e.ctrlKey || e.metaKey) && e.key === "Enter") {
+        e.preventDefault();
+        const formEl = document.querySelector(".erp-drawer-form") as HTMLFormElement | null;
+        formEl?.requestSubmit();
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isDrawerOpen]);
+
+  useEffect(() => {
+    if (router.query.action === "new") {
+      setIsDrawerOpen(true);
+    }
+  }, [router.query.action]);
 
   async function load() {
     setLoading(true);
@@ -59,16 +100,16 @@ export default function WashEntriesPage() {
     void Promise.resolve().then(load);
     getBusinessResource<Item>("customers", { limit: 100 })
       .then((res) => setCustomers("items" in res ? res.items : []))
-      .catch(() => {});
+      .catch(() => { });
     getBusinessResource<Item>("vehicles", { limit: 100 })
       .then((res) => setVehicles("items" in res ? res.items : []))
-      .catch(() => {});
+      .catch(() => { });
     getBusinessResource<Item>("wash-types", { limit: 100 })
       .then((res) => setWashTypes("items" in res ? res.items : []))
-      .catch(() => {});
+      .catch(() => { });
     getBusinessResource<Item>("employees", { limit: 100 })
       .then((res) => setEmployees("items" in res ? res.items : []))
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   // Auto-fetch rate helper when customer or wash type changes
@@ -78,8 +119,50 @@ export default function WashEntriesPage() {
     if (!wt) return;
     const rates = Array.isArray(wt.rates) ? (wt.rates as { customerId?: string; amount?: number }[]) : [];
     const customRate = rates.find((r) => String(r.customerId) === customerId)?.amount;
-    const rateToSet = customRate !== undefined ? customRate : Number(wt.rate || 350);
+    const rateToSet = customRate !== undefined ? customRate : Number(wt.baseRate || wt.rate || 350);
     setForm((prev) => ({ ...prev, savedRate: rateToSet, rateModified: false }));
+  }
+
+  function handleCustomerCreated(newCust: Item) {
+    const cid = String(newCust._id || newCust.id || "");
+    if (!cid) return;
+    setCustomers((prev) => [newCust, ...prev.filter((c) => String(c._id || c.id) !== cid)]);
+    setForm((prev) => ({ ...prev, customerId: cid }));
+    if (form.washTypeId) {
+      updateRate(cid, String(form.washTypeId));
+    }
+  }
+
+  function handleVehicleCreated(newVeh: Item) {
+    const vid = String(newVeh._id || newVeh.id || "");
+    if (!vid) return;
+    setVehicles((prev) => [newVeh, ...prev.filter((v) => String(v._id || v.id) !== vid)]);
+    const custId =
+      newVeh.customerId && typeof newVeh.customerId === "object"
+        ? String((newVeh.customerId as { _id: string })._id)
+        : String(newVeh.customerId || "");
+    setForm((prev) => ({
+      ...prev,
+      vehicleId: vid,
+      customerId: prev.customerId || custId,
+      driverName: prev.driverName || String(newVeh.driverName || ""),
+      driverMobileNumber: prev.driverMobileNumber || String(newVeh.driverMobileNumber || ""),
+    }));
+  }
+
+  function handleWashTypeCreated(newWt: Item) {
+    const wid = String(newWt._id || newWt.id || "");
+    if (!wid) return;
+    setWashTypes((prev) => [newWt, ...prev.filter((w) => String(w._id || w.id) !== wid)]);
+    const baseRate = Number(newWt.baseRate || newWt.rate || 350);
+    setForm((prev) => ({ ...prev, washTypeId: wid, savedRate: baseRate, rateModified: false }));
+  }
+
+  function handleEmployeeCreated(newEmp: Item) {
+    const eid = String(newEmp._id || newEmp.id || "");
+    if (!eid) return;
+    setEmployees((prev) => [newEmp, ...prev.filter((e) => String(e._id || e.id) !== eid)]);
+    setForm((prev) => ({ ...prev, employeeId: eid }));
   }
 
   async function submit(e: FormEvent<HTMLFormElement>) {
@@ -331,9 +414,9 @@ export default function WashEntriesPage() {
   const vehicleOptions = useMemo(() => {
     const list = form.customerId
       ? vehicles.filter((v) => {
-          const cid = typeof v.customerId === "object" && v.customerId ? (v.customerId as { _id: string })._id : v.customerId;
-          return String(cid) === String(form.customerId);
-        })
+        const cid = typeof v.customerId === "object" && v.customerId ? (v.customerId as { _id: string })._id : v.customerId;
+        return String(cid) === String(form.customerId);
+      })
       : vehicles;
 
     return list.map((v) => ({
@@ -673,6 +756,11 @@ export default function WashEntriesPage() {
                 value={String(form.customerId || "")}
                 options={customerOptions}
                 placeholder="-- Choose Customer --"
+                onAddNew={(query) => {
+                  setCustomerSearch(query || "");
+                  setShowCustomerModal(true);
+                }}
+                addNewLabel="Add New Customer"
                 onChange={(val) => {
                   setForm((prev) => ({ ...prev, customerId: val, vehicleId: "" }));
                   if (fieldErrors.customerId) {
@@ -700,6 +788,11 @@ export default function WashEntriesPage() {
                 value={String(form.vehicleId || "")}
                 options={vehicleOptions}
                 placeholder="-- Choose Vehicle --"
+                onAddNew={(query) => {
+                  setVehicleSearch(query || "");
+                  setShowVehicleModal(true);
+                }}
+                addNewLabel="Add New Vehicle"
                 onChange={(val) => {
                   const veh = vehicles.find((v) => String(v._id) === val);
                   const custId = veh && typeof veh.customerId === "object" && veh.customerId ? String((veh.customerId as { _id: string })._id) : String(veh?.customerId || "");
@@ -732,6 +825,11 @@ export default function WashEntriesPage() {
                 value={String(form.washTypeId || "")}
                 options={washTypeOptions}
                 placeholder="-- Choose Wash Service --"
+                onAddNew={(query) => {
+                  setWashTypeSearch(query || "");
+                  setShowWashTypeModal(true);
+                }}
+                addNewLabel="Add Wash Service"
                 onChange={(val) => {
                   setForm((prev) => ({ ...prev, washTypeId: val }));
                   if (fieldErrors.washTypeId) {
@@ -780,6 +878,11 @@ export default function WashEntriesPage() {
                 value={String(form.employeeId || "")}
                 options={employeeOptions}
                 placeholder="-- Optional Washer Assignment --"
+                onAddNew={(query) => {
+                  setEmployeeSearch(query || "");
+                  setShowEmployeeModal(true);
+                }}
+                addNewLabel="Add Washer / Employee"
                 onChange={(val) => setForm({ ...form, employeeId: val })}
               />
             </div>
@@ -902,6 +1005,37 @@ export default function WashEntriesPage() {
           </div>
         </form>
       </ErpDrawer>
+
+      {/* Quick Master Modals */}
+      <QuickCustomerModal
+        isOpen={showCustomerModal}
+        onClose={() => setShowCustomerModal(false)}
+        onSuccess={handleCustomerCreated}
+        initialName={customerSearch}
+      />
+
+      <QuickVehicleModal
+        isOpen={showVehicleModal}
+        onClose={() => setShowVehicleModal(false)}
+        onSuccess={handleVehicleCreated}
+        initialVehicleNumber={vehicleSearch}
+        initialCustomerId={String(form.customerId || "")}
+        customers={customers}
+      />
+
+      <QuickWashTypeModal
+        isOpen={showWashTypeModal}
+        onClose={() => setShowWashTypeModal(false)}
+        onSuccess={handleWashTypeCreated}
+        initialName={washTypeSearch}
+      />
+
+      <QuickEmployeeModal
+        isOpen={showEmployeeModal}
+        onClose={() => setShowEmployeeModal(false)}
+        onSuccess={handleEmployeeCreated}
+        initialName={employeeSearch}
+      />
     </div>
   );
 }

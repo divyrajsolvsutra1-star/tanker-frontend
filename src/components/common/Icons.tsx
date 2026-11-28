@@ -371,3 +371,39 @@ export const DownloadIcon = (props: IconProps) => (
   </svg>
 );
 
+
+export const BuildingIcon = (props: IconProps) => (
+  <svg {...defaultProps(props)}>
+    <rect width="16" height="20" x="4" y="2" rx="2" ry="2" />
+    <path d="M9 22v-4h6v4" />
+    <path d="M8 6h.01" />
+    <path d="M16 6h.01" />
+    <path d="M12 6h.01" />
+    <path d="M12 10h.01" />
+    <path d="M12 14h.01" />
+    <path d="M16 10h.01" />
+    <path d="M16 14h.01" />
+    <path d="M8 10h.01" />
+    <path d="M8 14h.01" />
+  </svg>
+);
+
+export const UserIcon = (props: IconProps) => (
+  <svg {...defaultProps(props)}>
+    <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
+    <circle cx="12" cy="7" r="4" />
+  </svg>
+);
+
+export const XIcon = (props: IconProps) => (
+  <svg {...defaultProps(props)}>
+    <path d="M18 6 6 18" />
+    <path d="m6 6 12 12" />
+  </svg>
+);
+
+export const SparkleIcon = (props: IconProps) => (
+  <svg {...defaultProps(props)}>
+    <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z" />
+  </svg>
+);
