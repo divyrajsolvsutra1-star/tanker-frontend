@@ -31,6 +31,10 @@ export type CrudField = {
   options?: { value: string; label: string }[];
   required?: boolean;
   min?: number;
+  maxLength?: number;
+  pattern?: string;
+  inputMode?: "text" | "numeric" | "tel" | "email";
+  validationMessage?: string;
 };
 
 type Props = {
@@ -175,14 +179,17 @@ export default function CrudModule({ title, description, path, fields }: Props) 
     setError("");
     setSaved("");
 
-    // Required fields client-side validation
+    // Required + format validation (client-side)
     const errors: Record<string, string> = {};
     fields.forEach((f) => {
-      if (f.required) {
-        const val = form[f.name];
-        if (val === undefined || val === null || String(val).trim() === "") {
-          errors[f.name] = `${f.label} is required. Please fill this field.`;
-        }
+      const val = form[f.name];
+      const isEmpty = val === undefined || val === null || String(val).trim() === "";
+      if (f.required && isEmpty) {
+        errors[f.name] = `${f.label} is required. Please fill this field.`;
+        return;
+      }
+      if (!isEmpty && f.pattern && !new RegExp(`^(?:${f.pattern})$`).test(String(val))) {
+        errors[f.name] = f.validationMessage || `Enter a valid ${f.label.toLowerCase()}.`;
       }
     });
 
@@ -445,13 +452,19 @@ export default function CrudModule({ title, description, path, fields }: Props) 
                       id={`erp-input-${field.name}`}
                       required={field.required}
                       min={field.min}
+                      maxLength={field.maxLength}
+                      pattern={field.pattern}
+                      inputMode={field.inputMode}
                       type={field.type || "text"}
                       placeholder={`Enter ${field.label.toLowerCase()}...`}
                       value={String(form[field.name] ?? "")}
                       onChange={(e) => {
+                        const raw = e.target.value;
+                        const next =
+                          field.inputMode === "numeric" ? raw.replace(/\D/g, "").slice(0, field.maxLength) : raw;
                         setForm({
                           ...form,
-                          [field.name]: field.type === "number" ? Number(e.target.value) : e.target.value,
+                          [field.name]: field.type === "number" ? Number(next) : next,
                         });
                         if (fieldErrors[field.name]) {
                           setFieldErrors((prev) => {

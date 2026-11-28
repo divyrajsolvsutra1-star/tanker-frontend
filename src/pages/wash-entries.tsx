@@ -106,6 +106,10 @@ export default function WashEntriesPage() {
     if (form.paymentType === "immediate" && !form.paymentMethod) {
       errors.paymentMethod = "Payment method is required for immediate counter payment.";
     }
+    const driverMobile = String(form.driverMobileNumber || "").trim();
+    if (driverMobile && !/^[6-9]\d{9}$/.test(driverMobile)) {
+      errors.driverMobileNumber = "Enter a valid 10-digit mobile number (starting 6-9).";
+    }
 
     if (Object.keys(errors).length > 0) {
       setFieldErrors(errors);
@@ -855,15 +859,31 @@ export default function WashEntriesPage() {
               />
             </div>
 
-            <div className="erp-field-group">
+            <div className={`erp-field-group ${fieldErrors.driverMobileNumber ? "erp-field-group--error" : ""}`}>
               <label>Driver Phone Number</label>
               <input
                 type="tel"
-                className="erp-input"
-                placeholder="+91 98765 43210"
+                inputMode="numeric"
+                maxLength={10}
+                pattern="[6-9][0-9]{9}"
+                className={`erp-input ${fieldErrors.driverMobileNumber ? "erp-input--error" : ""}`}
+                placeholder="98765 43210"
                 value={String(form.driverMobileNumber || "")}
-                onChange={(e) => setForm({ ...form, driverMobileNumber: e.target.value })}
+                onChange={(e) => {
+                  const digits = e.target.value.replace(/\D/g, "").slice(0, 10);
+                  setForm({ ...form, driverMobileNumber: digits });
+                  if (fieldErrors.driverMobileNumber) {
+                    setFieldErrors((prev) => {
+                      const next = { ...prev };
+                      delete next.driverMobileNumber;
+                      return next;
+                    });
+                  }
+                }}
               />
+              {fieldErrors.driverMobileNumber && (
+                <span className="erp-field-error-msg">{fieldErrors.driverMobileNumber}</span>
+              )}
             </div>
           </div>
 

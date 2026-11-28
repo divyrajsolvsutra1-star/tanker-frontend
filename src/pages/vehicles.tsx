@@ -35,7 +35,15 @@ export default function VehiclesPage() {
           options: customerOptions.length ? customerOptions : undefined,
         },
         { name: "driverName", label: "Driver Name" },
-        { name: "driverMobileNumber", label: "Driver Mobile Number" },
+        {
+          name: "driverMobileNumber",
+          label: "Driver Mobile Number",
+          type: "tel",
+          inputMode: "numeric",
+          maxLength: 10,
+          pattern: "[6-9][0-9]{9}",
+          validationMessage: "Enter a valid 10-digit mobile number (starting 6-9).",
+        },
         {
           name: "status",
           label: "Status",
